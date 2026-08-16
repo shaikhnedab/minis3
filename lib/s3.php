@@ -372,6 +372,12 @@ function s3_list_objects_core(int $bucketId, string $prefix, string $delimiter, 
     $nextKey = '';
     $emitted = 0;
     $cursor = $startAfter;
+    // Key of the last row that produced an emitted item (content or new
+    // CommonPrefix). The page cursor must resume from that key, not from the
+    // row that triggered the cutoff: the cutoff row may collapse into a
+    // CommonPrefix that has not been emitted yet, and using its raw key as
+    // the cursor would skip that prefix forever (lost folders in listings).
+    $lastEmittedKey = $startAfter;
 
     // Fetch in batches: keys collapse into CommonPrefixes under a delimiter,
     // so maxKeys+1 rows may not cover maxKeys result items. Keep fetching
@@ -395,7 +401,7 @@ function s3_list_objects_core(int $bucketId, string $prefix, string $delimiter, 
 
         foreach ($rows as $row) {
             if ($emitted >= $maxKeys) {
-                $nextKey = $row['key'];
+                $nextKey = $lastEmittedKey;
                 break 2;
             }
             $k = $row['key'];
@@ -407,12 +413,14 @@ function s3_list_objects_core(int $bucketId, string $prefix, string $delimiter, 
                     if (!isset($prefixes[$cp])) {
                         $prefixes[$cp] = true;
                         $emitted++;
+                        $lastEmittedKey = $k;
                     }
                     continue;
                 }
             }
             $contents[] = $row;
             $emitted++;
+            $lastEmittedKey = $k;
         }
         if (!$hasMore) {
             break;
@@ -493,7 +501,7 @@ function s3_list_objects_v2(array $user, string $bucket, ?array $b, array $q, ar
         . '<StartAfter>' . e($ek($startAfter)) . '</StartAfter>'
         . ($continuation !== '' ? '<ContinuationToken>' . e($continuation) . '</ContinuationToken>' : '')
         . ($res['truncated'] ? '<NextContinuationToken>' . e(base64_encode($res['nextKey'])) . '</NextContinuationToken>' : '')
-        . '<KeyCount>' . count($res['contents']) . '</KeyCount>'
+        . '<KeyCount>' . (count($res['contents']) + count($res['prefixes'])) . '</KeyCount>'
         . '<MaxKeys>' . (int)$maxKeys . '</MaxKeys>'
         . ($delimiter !== '' ? '<Delimiter>' . e($ek($delimiter)) . '</Delimiter>' : '')
         . '<IsTruncated>' . ($res['truncated'] ? 'true' : 'false') . '</IsTruncated>';
@@ -511,7 +519,7 @@ function s3_meta_headers(): array
 {
     $meta = [];
     foreach (s3_headers_map() as $k => $v) {
-        if (strpos($k, 'x-amz-meta-') === 0) {
+        if (strpos((string)$k, 'x-amz-meta-') === 0) {
             $meta[$k] = $v;
         }
     }
@@ -767,6 +775,14 @@ function s3_copy_object(array $user, array $b, string $key, array $ctx): void
         [$size, $etag] = s3_copy_file_to($srcPath, $tmp);
     }
 
+    $existing = db_find_object((int)$b['id'], $key);
+    try {
+        s3_quota_check($user, $size, $existing !== null ? (int)$existing['size'] : 0);
+    } catch (S3Exception $e) {
+        @unlink($tmp);
+        throw $e;
+    }
+
     @unlink($target);
     if (!@rename($tmp, $target)) {
         @unlink($tmp);
@@ -808,7 +824,7 @@ function s3_object_headers(array $obj, int $size, int $mtime, string $etag): arr
     $meta = json_decode($obj['meta'] ?? '{}', true);
     if (is_array($meta)) {
         foreach ($meta as $k => $v) {
-            if (preg_match('/^x-amz-meta-[a-z0-9-]+$/', $k)) {
+            if (preg_match('/^x-amz-meta-[a-z0-9_-]+$/', $k)) {
                 $h[$k] = $v;
             }
         }
@@ -863,7 +879,12 @@ function s3_get_object(array $user, array $b, string $key, array $ctx): void
     $range = s3_header('range');
     $status = 200;
     if ($range !== null) {
-        [$start, $end] = s3_parse_range($range, $size);
+        try {
+            [$start, $end] = s3_parse_range($range, $size);
+        } catch (S3Exception $e) {
+            header('Content-Range: bytes */' . $size);
+            throw $e;
+        }
         if ($start !== 0 || $end !== $size - 1) {
             $status = 206;
             $headers['Content-Range'] = 'bytes ' . $start . '-' . $end . '/' . $size;

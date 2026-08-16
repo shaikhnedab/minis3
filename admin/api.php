@@ -1219,6 +1219,15 @@ function admin_transfer(array $user, array $b, string $srcPrefix, array $items, 
             s3_ensure_dir(dirname($dir . '/' . $dstKey), [$user['username'], $b['name'], $bucketId]);
             $tmp = $dir . '/.tmp-' . s3_random_id(8);
             [$size, $etag] = s3_copy_file_to($srcPath, $tmp);
+            if ($mode === 'copy') {
+                $dstRow = db_find_object($bucketId, $dstKey);
+                try {
+                    s3_quota_check($user, $size, $dstRow !== null ? (int)$dstRow['size'] : 0);
+                } catch (S3Exception $e) {
+                    @unlink($tmp);
+                    throw $e;
+                }
+            }
             $target = $dir . '/' . $dstKey;
             @unlink($target);
             if (!@rename($tmp, $target)) {

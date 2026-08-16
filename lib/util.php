@@ -165,7 +165,7 @@ function s3_delete_tree(string $dir): void
 function s3_parse_range(string $h, int $size): array
 {
     if (!preg_match('/^bytes=(\d*)-(\d*)$/', trim($h), $m) || ($m[1] === '' && $m[2] === '')) {
-        return [0, $size - 1];
+        throw new S3Exception('InvalidRange', 'The requested range is not satisfiable', 416);
     }
     if ($m[1] === '') {
         $len = (int)$m[2];

@@ -241,8 +241,8 @@ function s3_authenticate_presigned(): ?array
         return null;
     }
     $method = $_SERVER['REQUEST_METHOD'];
-    if ($method !== 'GET' && $method !== 'HEAD') {
-        throw new S3Exception('AccessDenied', 'Presigned URLs only support GET and HEAD.', 403);
+    if ($method !== 'GET' && $method !== 'HEAD' && $method !== 'PUT' && $method !== 'DELETE') {
+        throw new S3Exception('AccessDenied', 'Presigned URLs only support GET, HEAD, PUT and DELETE.', 403);
     }
     if (($_GET['X-Amz-Algorithm'] ?? '') !== 'AWS4-HMAC-SHA256') {
         throw new S3Exception('AuthorizationQueryParametersError', 'Unsupported X-Amz-Algorithm.', 400);

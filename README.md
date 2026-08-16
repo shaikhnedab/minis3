@@ -29,8 +29,9 @@ minis3/
   multipart uploads (initiate/part/complete/abort/list), bucket ACL/versioning/
   location stubs.
 - AWS Signature V4 authentication (path-style requests), including
-  query-string **presigned GET URLs** (generate time-limited share links from
-  the admin panel; external clients can presign too).
+  query-string **presigned URLs for GET, HEAD, PUT and DELETE** (generate
+  time-limited share links from the admin panel; external clients can presign
+  uploads too - tested with the Pelican Panel + Wings backup upload flow).
 - Optional **per-user storage quotas** (set in MB per user; enforced on S3
   PUTs, multipart completion and admin uploads with `QuotaExceeded` errors).
 - Admin panel trash: files deleted in the UI are kept for a configurable
@@ -182,9 +183,9 @@ site behind HTTPS.
 
 ## Notes and limitations
 
-- Signature V4 (header auth **and** query-string presigned GET URLs); no
-  versioning; no bucket policies or object tagging (those sub-resources
-  return 501 or a stub response).
+- Signature V4 (header auth **and** query-string presigned URLs for GET,
+  HEAD, PUT and DELETE); no versioning; no bucket policies or object tagging
+  (those sub-resources return 501 or a stub response).
 - Bucket names must follow S3 rules (3-63 chars, lowercase letters, digits,
   dots, hyphens). Buckets are namespaced per user, so two users may have
   buckets with the same name.

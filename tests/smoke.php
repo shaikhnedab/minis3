@@ -231,6 +231,27 @@ function s3_request(string $method, string $path, array $headerLines = [], strin
     return http($method, $endpoint . $path, $hs, $body);
 }
 
+// Builds a presigned URL for any method (GET / PUT / DELETE / HEAD) and
+// returns [url, signature]. Used to exercise query-string auth the way
+// external tools (e.g. game-panel backup daemons) do.
+function presign_url(string $method, string $path, int $expires = 300): array
+{
+    global $endpoint, $accessKey, $secretKey, $region;
+    $host = parse_url($endpoint, PHP_URL_HOST) . ':' . parse_url($endpoint, PHP_URL_PORT);
+    $date = gmdate('Ymd\THis\Z');
+    $scope = substr($date, 0, 8) . '/' . $region . '/s3/aws4_request';
+    $q = 'X-Amz-Algorithm=AWS4-HMAC-SHA256'
+        . '&X-Amz-Credential=' . rawurlencode($accessKey . '/' . $scope)
+        . '&X-Amz-Date=' . $date . '&X-Amz-Expires=' . $expires . '&X-Amz-SignedHeaders=host';
+    $canonical = "$method\n$path\n$q\nhost:$host\n\nhost\nUNSIGNED-PAYLOAD";
+    $kDate = hash_hmac('sha256', substr($date, 0, 8), 'AWS4' . $secretKey, true);
+    $kRegion = hash_hmac('sha256', $region, $kDate, true);
+    $kService = hash_hmac('sha256', 's3', $kRegion, true);
+    $kSigning = hash_hmac('sha256', 'aws4_request', $kService, true);
+    $sts = "AWS4-HMAC-SHA256\n$date\n$scope\n" . hash('sha256', $canonical);
+    return [$path . '?' . $q . '&X-Amz-Signature=' . hash_hmac('sha256', $sts, $kSigning), hash_hmac('sha256', $sts, $kSigning)];
+}
+
 // ---------- tests ----------
 $bucket = 'smoke-' . bin2hex(random_bytes(4));
 
@@ -273,30 +294,17 @@ t_check($st === 200 && ($rh['content-length'] ?? '') === (string)strlen($content
 t_check($st === 200 && $body === $content, 'GetObject content');
 
 // ---------- presigned URL (query string auth) ----------
-$phost = parse_url($endpoint, PHP_URL_HOST) . ':' . parse_url($endpoint, PHP_URL_PORT);
-$pDate = gmdate('Ymd\THis\Z');
-$pScope = substr($pDate, 0, 8) . '/' . $region . '/s3/aws4_request';
-$pQuery = 'X-Amz-Algorithm=AWS4-HMAC-SHA256'
-    . '&X-Amz-Credential=' . rawurlencode($accessKey . '/' . $pScope)
-    . '&X-Amz-Date=' . $pDate . '&X-Amz-Expires=300&X-Amz-SignedHeaders=host';
-$pPath = '/' . $bucket . '/hello.txt';
-$pCanonical = "GET\n$pPath\n$pQuery\nhost:$phost\n\nhost\nUNSIGNED-PAYLOAD";
-$kDate = hash_hmac('sha256', substr($pDate, 0, 8), 'AWS4' . $secretKey, true);
-$kRegion = hash_hmac('sha256', $region, $kDate, true);
-$kService = hash_hmac('sha256', 's3', $kRegion, true);
-$kSigning = hash_hmac('sha256', 'aws4_request', $kService, true);
-$pSts = "AWS4-HMAC-SHA256\n$pDate\n$pScope\n" . hash('sha256', $pCanonical);
-$pSig = hash_hmac('sha256', $pSts, $kSigning);
+[$pUrl, $pSig] = presign_url('GET', '/' . $bucket . '/hello.txt');
 
-[$st, , $body] = http('GET', $endpoint . $pPath . '?' . $pQuery . '&X-Amz-Signature=' . $pSig);
+[$st, , $body] = http('GET', $endpoint . $pUrl);
 t_check($st === 200 && $body === $content, 'Presigned GET 200 (no auth header)');
 
 $badSig = substr($pSig, 0, -1) . (substr($pSig, -1) === '0' ? '1' : '0');
-[$st, , $body] = http('GET', $endpoint . $pPath . '?' . $pQuery . '&X-Amz-Signature=' . $badSig);
+[$st, , $body] = http('GET', $endpoint . preg_replace('/X-Amz-Signature=[^&]+/', 'X-Amz-Signature=' . $badSig, $pUrl));
 t_check($st === 403 && strpos($body, 'SignatureDoesNotMatch') !== false, 'Tampered presigned signature 403');
 
-[$st, , $body] = http('PUT', $endpoint . $pPath . '?' . $pQuery . '&X-Amz-Signature=' . $pSig, ['Content-Length: 1'], 'x');
-t_check($st === 403, 'Presigned URL rejects PUT');
+[$st, , $body] = http('PUT', $endpoint . $pUrl, ['Content-Length: 1'], 'x');
+t_check($st === 403, 'Presigned GET URL cannot be used with PUT (signature mismatch)');
 
 [$st, , $body] = s3_request('GET', '/' . $bucket . '/hello.txt', ['Range: bytes=0-4']);
 t_check($st === 206 && $body === 'Hello', 'GetObject range 0-4 (206)');
@@ -379,6 +387,53 @@ t_check($st === 403, 'Bad signature 403');
 
 [$st, , $body] = s3_request('GET', '/' . $bucket . '?list-type=2');
 t_check($st === 200 && strpos($body, '<KeyCount>5</KeyCount>') !== false, '5 objects remain (nested, big.bin, empty.txt, md5.txt, quota.bin)');
+
+// ---------- presigned PUT / DELETE (query string auth for uploads) ----------
+// This is how game-panel backup daemons (e.g. Pelican Wings) push backups:
+// the panel hands out presigned PUT URLs and the daemon PUTs the payload.
+$ppBody = 'presigned-put-' . bin2hex(random_bytes(4));
+[$ppUrl] = presign_url('PUT', '/' . $bucket . '/presign-put.bin');
+[$st, , $body] = http('PUT', $endpoint . $ppUrl, ['Content-Length: ' . strlen($ppBody)], $ppBody);
+t_check($st === 200, 'Presigned PUT upload 200');
+[$st, , $body] = s3_request('GET', '/' . $bucket . '/presign-put.bin');
+t_check($st === 200 && $body === $ppBody, 'Presigned PUT object readable');
+[$st, , $body] = http('GET', $endpoint . '/' . $bucket . '/presign-put.bin');
+t_check($st === 403, 'Presigned PUT object is not public');
+
+s3_request('PUT', '/' . $bucket . '/presign-del.txt', ['Content-Type: text/plain'], 'del-me');
+[$pdUrl] = presign_url('DELETE', '/' . $bucket . '/presign-del.txt');
+[$st] = http('DELETE', $endpoint . $pdUrl);
+t_check($st === 204, 'Presigned DELETE 204');
+[$st] = s3_request('HEAD', '/' . $bucket . '/presign-del.txt');
+t_check($st === 404, 'Presigned DELETE removed the object');
+s3_request('DELETE', '/' . $bucket . '/presign-put.bin');
+
+// ---------- delimiter pagination: CommonPrefixes must not be lost ----------
+for ($i = 1; $i <= 6; $i++) {
+    s3_request('PUT', '/' . $bucket . '/pdir' . $i . '/file.txt', ['Content-Type: text/plain'], 'p');
+}
+$seenPrefixes = [];
+$token = '';
+$pages = 0;
+do {
+    $url = '/' . $bucket . '?list-type=2&delimiter=/&max-keys=2'
+        . ($token !== '' ? '&continuation-token=' . urlencode($token) : '');
+    [$st, , $body] = s3_request('GET', $url);
+    if ($st !== 200) {
+        break;
+    }
+    preg_match_all('#<Prefix>([^<]+)</Prefix>#', $body, $m);
+    $seenPrefixes = array_merge($seenPrefixes, $m[1]);
+    $pages++;
+    preg_match('#<NextContinuationToken>([^<]+)</NextContinuationToken>#', $body, $tm);
+    $token = $tm[1] ?? '';
+} while ($token !== '' && $pages < 10);
+sort($seenPrefixes);
+t_check($pages >= 3 && $seenPrefixes === ['folder/', 'pdir1/', 'pdir2/', 'pdir3/', 'pdir4/', 'pdir5/', 'pdir6/'],
+    'Delimiter pagination keeps all CommonPrefixes across pages');
+for ($i = 1; $i <= 6; $i++) {
+    s3_request('DELETE', '/' . $bucket . '/pdir' . $i . '/file.txt');
+}
 
 [$st] = s3_request('DELETE', '/' . $bucket . '/big.bin');
 t_check($st === 204, 'DeleteObject 204');
