@@ -1,0 +1,22 @@
+Options -Indexes
+
+<IfModule mod_rewrite.c>
+RewriteEngine On
+
+# Block direct access to internal directories and configuration
+RewriteRule ^(data|lib|tests)(/|$) - [F,L]
+RewriteRule ^\.git(/|$) - [F,L]
+RewriteRule ^config\.php$ - [F,L]
+
+# Serve the app's own PHP files directly (the pattern excludes the query
+# string, so api.php?action=... keeps working)
+RewriteRule ^(index|install)\.php$ - [L]
+RewriteRule ^admin/(index|api)\.php$ - [L]
+
+# Admin area (single page app)
+RewriteRule ^admin/?$ admin/index.php [L,QSA]
+RewriteRule ^admin/ admin/index.php [L,QSA]
+
+# S3 API: everything else goes to the front controller
+RewriteRule ^ index.php [L,QSA]
+</IfModule>

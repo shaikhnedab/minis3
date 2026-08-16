@@ -1,0 +1,12 @@
+# Object data, SQLite database and multipart staging - NEVER commit
+# (contains live user data and secret keys)
+data/
+
+# Scratch test helpers (not part of the project)
+tests/tmp_*.php
+
+# OS / editor noise
+.DS_Store
+Thumbs.db
+# Local agent workspace
+.zcode/
