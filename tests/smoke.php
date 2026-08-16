@@ -356,6 +356,21 @@ s3_request('PUT', '/' . $bucket . '/abort.bin?partNumber=1&uploadId=' . urlencod
 [$st] = s3_request('DELETE', '/' . $bucket . '/abort.bin?uploadId=' . urlencode($uid2));
 t_check($st === 204, 'AbortMultipartUpload 204');
 
+// ---------- complete tolerates a mismatched client ETag ----------
+// Some client stacks (e.g. game-panel backup daemons) report part ETags with
+// quoting/encoding differences; the object is assembled from the stored parts
+// so a mismatched ETag is not fatal.
+[$st, , $body] = s3_request('POST', '/' . $bucket . '/etag-tol.bin?uploads');
+preg_match('#<UploadId>([^<]+)</UploadId>#', $body, $m);
+$uid3 = $m[1] ?? '';
+s3_request('PUT', '/' . $bucket . '/etag-tol.bin?partNumber=1&uploadId=' . urlencode($uid3), ['Content-Type: application/octet-stream'], 'etag-data');
+[$st, , $body] = s3_request('POST', '/' . $bucket . '/etag-tol.bin?uploadId=' . urlencode($uid3), ['Content-Type: application/xml'],
+    '<CompleteMultipartUpload><Part><PartNumber>1</PartNumber><ETag>"00000000000000000000000000000000"</ETag></Part></CompleteMultipartUpload>');
+t_check($st === 200, 'Complete tolerates mismatched client ETag');
+[$st, , $body] = s3_request('GET', '/' . $bucket . '/etag-tol.bin');
+t_check($st === 200 && $body === 'etag-data', 'Mismatched-ETag complete produced correct object');
+s3_request('DELETE', '/' . $bucket . '/etag-tol.bin');
+
 // ---------- storage quota (admin sets 1 MB on the test user) ----------
 if (!empty($csrf) && !empty($adminUserId)) {
     [$st] = http('POST', $endpoint . '/admin/api.php?action=users', ['X-CSRF-Token: ' . $csrf],

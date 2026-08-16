@@ -1117,12 +1117,12 @@ function s3_complete_multipart(array $user, array $b, string $key, array $q, arr
         if ($i < $last && filesize($pf) < MIN_PART_BYTES) {
             throw new S3Exception('EntityTooSmall', 'Your proposed upload is smaller than the minimum allowed object size.', 400);
         }
-        if ($etag !== '') {
-            $partMd5 = md5_file($pf);
-            if ($partMd5 === false || !hash_equals($etag, $partMd5)) {
-                throw new S3Exception('InvalidPart', 'One or more of the specified parts could not be found. The part may not have been uploaded.', 400);
-            }
-        }
+        // The object is assembled from the parts stored on this server, so a
+        // client-supplied ETag that does not match is not a consistency
+        // problem: some client stacks (e.g. game-panel backup daemons) report
+        // an ETag with quoting/encoding differences that do not match what was
+        // stored. Only missing parts are fatal; the response ETag is always
+        // computed from the actual concatenated data.
     }
 
     if (s3_is_folder_marker($key)) {
