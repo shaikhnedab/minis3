@@ -217,7 +217,7 @@ https://s3.yourdomain.com/config.php
 | WinSCP: `Connection reset` on TLS | Some hosts proxy TLS via an nginx/LiteSpeed layer with a stale cert - re-issue the cert for the domain, use port 443, and clear WinSCP's cached cert for the host |
 | `AccessDenied` with `x-amz-date` error | Client is not sending `x-amz-date`; use a real S3 client (WinSCP S3, rclone, aws cli) |
 | Big upload stalls / times out | Raise PHP time limits (section 6); check `max_execution_time`, and `set_time_limit` being disabled via `disable_functions` |
-| Bucket named `admin` unreachable | `admin` is reserved by the admin panel routes - rename the bucket |
+| Bucket named `admin` (or `data`, `lib`, `tests`, `tools`, `index.php`, `install.php`, `reset.php`) unreachable | Those names are reserved by the app's routing / file serving - rename the bucket |
 | Admin panel works but S3 API returns HTML | Apache rewriting is off; `.htaccess` `RewriteRule ^ index.php` is what routes S3 requests |
 | 403 on everything from a new client | Client used signature v2, or virtual-host style URLs (bucket.yourdomain.com); path-style + SigV4 is required |
 | Forgot the admin username / password | If you have shell access: `php tools/reset-admin.php` in `public_html/` (it also clears two-factor authentication). Without shell access: create an empty file `data/reset.enabled` via FTP / File Manager, open `https://s3.yourdomain.com/reset.php` in a browser and set a new username/password - the marker is deleted automatically when done |

@@ -203,9 +203,10 @@ site behind HTTPS.
 - Object keys containing `.` or `..` path segments are rejected (filesystem
   safety). Keys ending with `/` are treated as empty-folder markers and are
   supported; normal files use real keys like `folder/file.txt`.
-- Do not name buckets `admin`, `data`, `lib` or `tests`, and do not use keys
-  that collide with the app files (`index.php`, `install.php`) - Apache serves
-  real files before the S3 router runs.
+- Do not name buckets `admin`, `data`, `lib`, `tests`, `tools`, `index.php`,
+  `install.php` or `reset.php` - Apache/nginx serve the real app files (or
+  deny them) before the S3 router runs, so those bucket names are
+  unreachable. Object keys are always under a bucket and never collide.
 - Upload/download size limits come from your PHP (`upload_max_filesize`,
   `post_max_size`, `max_execution_time`) and web server (`client_max_body_size`
   on nginx) configuration. Admin uploads and the S3 `PUT` API stream the body

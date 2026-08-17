@@ -29,6 +29,24 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if (!$active) {
         $err = 'Reset is disabled. Create the file data/reset.enabled via FTP / File Manager, then try again.';
     } else {
+        // Same-origin check (CSRF-lite): while the marker is active a
+        // cross-site form could otherwise reset the password by luring the
+        // site owner into submitting it. Browsers always send Origin (or
+        // Referer) on POST; curl / CLI submissions without either are allowed.
+        $host = (string)($_SERVER['HTTP_HOST'] ?? '');
+        $origin = (string)($_SERVER['HTTP_ORIGIN'] ?? '');
+        $referer = (string)($_SERVER['HTTP_REFERER'] ?? '');
+        $source = $origin !== '' ? $origin : $referer;
+        $mismatch = false;
+        if ($source !== '' && $host !== '') {
+            $srcHost = strtolower((string)parse_url($source, PHP_URL_HOST));
+            $hostName = strtolower((string)parse_url('http://' . $host, PHP_URL_HOST));
+            $mismatch = $srcHost !== '' && $srcHost !== $hostName;
+        }
+        if ($mismatch) {
+            http_response_code(403);
+            exit('Forbidden');
+        }
         $username = trim((string)($_POST['username'] ?? ''));
         $p1 = (string)($_POST['password'] ?? '');
         $p2 = (string)($_POST['password2'] ?? '');

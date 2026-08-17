@@ -213,7 +213,7 @@ php8.5 -r '$db = new PDO("sqlite:/var/www/minis3/data/app.sqlite"); $db->exec("P
 | Slow uploads / timeouts | `fastcgi_read_timeout` and `client_body_timeout`; also check disk space for nginx temp buffer |
 | `install.php` shows an S3 XML `AccessDenied` error | The installer is being routed to `index.php` (S3 API) - the `location = /install.php` block is missing; re-copy nginx.conf |
 | Can't reach the installer | It was deleted (good); or on an existing install the `install.php` page says "Already installed" |
-| Bucket named `admin` unreachable | `admin` is reserved by the admin panel routes - rename the bucket |
+| Bucket named `admin` (or `data`, `lib`, `tests`, `tools`, `index.php`, `install.php`, `reset.php`) unreachable | Those names are reserved by the app's routing / file serving - rename the bucket |
 | `AccessDenied: x-amz-date` | Client doesn't send `x-amz-date`; use a real S3 client (WinSCP S3, rclone, aws cli) |
 | Downloads show no file size / video preview won't play | nginx `gzip` or PHP `zlib.output_compression` is enabled - turn them off (section 8) |
 | Forgot the admin username / password | With shell access: `php tools/reset-admin.php` from the app root (clears two-factor authentication too). Without shell access: create an empty file `data/reset.enabled` (FTP / File Manager), open `/reset.php`, set a new username/password - the marker auto-deletes on success |
