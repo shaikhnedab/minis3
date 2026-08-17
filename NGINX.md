@@ -176,6 +176,12 @@ aws --endpoint-url https://s3.example.com s3 cp file.txt s3://my-bucket/
   bodies - make sure the temp dir (`/var/lib/nginx`) has free space, or set
   `client_body_buffer_size 64k` to force more to disk early.
 
+Output compression: leave nginx `gzip` **off** (the sample config does) and
+keep `zlib.output_compression = Off` in your PHP-FPM `php.ini` (the app also
+disables it at runtime). Compression strips `Content-Length` from streamed
+downloads and corrupts video/audio previews - the same symptoms as on Apache
+hosts where mod_deflate is enabled.
+
 ## 9. Backups
 
 ```bash
@@ -206,6 +212,7 @@ php8.5 -r '$db = new PDO("sqlite:/var/www/minis3/data/app.sqlite"); $db->exec("P
 | Can't reach the installer | It was deleted (good); or on an existing install the `install.php` page says "Already installed" |
 | Bucket named `admin` unreachable | `admin` is reserved by the admin panel routes - rename the bucket |
 | `AccessDenied: x-amz-date` | Client doesn't send `x-amz-date`; use a real S3 client (WinSCP S3, rclone, aws cli) |
+| Downloads show no file size / video preview won't play | nginx `gzip` or PHP `zlib.output_compression` is enabled - turn them off (section 8) |
 
 ## 11. Security checklist
 

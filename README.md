@@ -10,7 +10,7 @@ minis3/
 ├── index.php        S3 API front controller (every non-admin request)
 ├── install.php      one-time installer (delete after use)
 ├── config.php       configuration
-├── .htaccess        Apache rewrite + protection rules
+├── .htaccess        Apache rewrite + protection + compression-off rules
 ├── nginx.conf       sample nginx server block
 ├── router.php       only used by `php -S` for local development
 ├── admin/
@@ -203,6 +203,12 @@ site behind HTTPS.
 - Files larger than 2 GB are unreliable on 32-bit PHP builds.
 - `data/` holds the SQLite database. Back it up together with the files, or
   exclude it if you only need the object files.
+- Keep webserver/PHP output compression off for this app: it strips
+  `Content-Length` from streamed downloads and corrupts video/audio previews.
+  The bundled `.htaccess` disables `mod_deflate`/`mod_brotli`/`mod_gzip` and
+  PHP `zlib.output_compression` (mod_php/LSAPI) automatically; on nginx leave
+  `gzip` off and set `zlib.output_compression = Off` in your PHP config.
+  Folder ZIP downloads are streamed and intentionally have no `Content-Length`.
 
 ## Security checklist
 

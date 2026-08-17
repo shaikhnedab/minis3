@@ -149,6 +149,37 @@ bundled `.htaccess` works as-is. It:
 - blocks web access to `data/`, `lib/`, `tests/`, `config.php`
 - serves the admin panel (`/admin/`)
 - routes everything else to `index.php` (the S3 API)
+- disables webserver output compression (mod_deflate / mod_brotli / mod_gzip)
+  and PHP `zlib.output_compression` for the app
+
+### Output compression (important on shared hosting)
+
+Many DirectAdmin hosts enable compression (`mod_deflate` and/or PHP's
+`zlib.output_compression`). That breaks streamed downloads: the `Content-Length`
+header gets stripped (browsers show **no file size** when downloading backups)
+and video/audio previews fail because Range/206 responses get corrupted.
+
+The bundled `.htaccess` handles this automatically:
+
+- `SetEnv no-gzip` / `no-brotli` (re-enabled only for the admin SPA page)
+  disables mod_deflate / mod_brotli for everything else, and `mod_gzip_on No`
+  covers the older mod_gzip module.
+- `php_value zlib.output_compression Off` inside `<IfModule mod_php.c>` /
+  `mod_php7.c` / `mod_php8.c` / `mod_lsapi.c` blocks covers PHP-level
+  compression when PHP runs as mod_php or LiteSpeed LSAPI.
+
+If the `.htaccess` change causes a `500` on every page, your host rejects
+`php_value` in .htaccess - delete the four `<IfModule mod_php*>` /
+`mod_lsapi` blocks (the env-var rules are the important part). If PHP runs as
+PHP-FPM or CGI, also set `zlib.output_compression = Off` in the **PHP
+Settings** / PHP selector for the domain.
+
+Verify a download is uncompressed: in the browser devtools (Network tab) the
+download response must have a `Content-Length` header and **no**
+`Content-Encoding` header.
+
+Note: folder **ZIP** downloads are streamed and intentionally have no
+`Content-Length` - that is expected on every host.
 
 ### Verify data is not web-accessible
 
@@ -187,6 +218,7 @@ https://s3.yourdomain.com/config.php
 | Bucket named `admin` unreachable | `admin` is reserved by the admin panel routes - rename the bucket |
 | Admin panel works but S3 API returns HTML | Apache rewriting is off; `.htaccess` `RewriteRule ^ index.php` is what routes S3 requests |
 | 403 on everything from a new client | Client used signature v2, or virtual-host style URLs (bucket.yourdomain.com); path-style + SigV4 is required |
+| Downloads show no file size / video preview won't play | Webserver or PHP output compression is stripping `Content-Length` / corrupting streams - the bundled `.htaccess` disables it (section 6 "Output compression"); if a host rejects `php_value`, remove those blocks and set `zlib.output_compression = Off` in the domain's PHP settings |
 
 ## 9. Security checklist
 

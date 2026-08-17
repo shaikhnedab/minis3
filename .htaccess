@@ -1,12 +1,43 @@
 Options -Indexes
 
-# Never compress streamed downloads (video/audio/PDF previews and ZIPs) - the
-# admin API serves raw media and Range/206 responses; compression corrupts them.
+# The app serves raw media, backup archives and Range/206 responses. Webserver
+# compression (mod_deflate / mod_brotli / mod_gzip) strips Content-Length and
+# corrupts streamed downloads: on hosts that enable it (e.g. DirectAdmin
+# shared hosting) video previews break and downloads show no file size.
+# Disable it app-wide, keeping compression only for the admin SPA page.
 <IfModule mod_setenvif.c>
-SetEnvIf Request_URI "^/admin/api\.php" no-gzip=1
+SetEnv no-gzip
+SetEnv no-brotli
+SetEnvIf Request_URI "^(/admin/?|/admin/index\.php)$" !no-gzip
+SetEnvIf Request_URI "^(/admin/?|/admin/index\.php)$" !no-brotli
 </IfModule>
 <IfModule mod_deflate.c>
-SetEnvIfNoCase Request_URI "^/admin/api\.php" no-gzip
+SetEnv no-gzip
+SetEnvIf Request_URI "^(/admin/?|/admin/index\.php)$" !no-gzip
+</IfModule>
+<IfModule mod_brotli.c>
+SetEnv no-brotli
+SetEnvIf Request_URI "^(/admin/?|/admin/index\.php)$" !no-brotli
+</IfModule>
+<IfModule mod_gzip.c>
+mod_gzip_on No
+</IfModule>
+
+# Belt and braces for mod_php / LiteSpeed SAPIs: the app also disables PHP
+# output compression at runtime, this covers cases where that is ineffective.
+# If your host rejects php_value in .htaccess (500 on every page), remove the
+# matching <IfModule> block below - the rules above are the important part.
+<IfModule mod_php.c>
+php_value zlib.output_compression Off
+</IfModule>
+<IfModule mod_php7.c>
+php_value zlib.output_compression Off
+</IfModule>
+<IfModule mod_php8.c>
+php_value zlib.output_compression Off
+</IfModule>
+<IfModule mod_lsapi.c>
+php_value zlib.output_compression Off
 </IfModule>
 
 <IfModule mod_rewrite.c>
