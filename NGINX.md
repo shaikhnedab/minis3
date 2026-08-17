@@ -56,6 +56,7 @@ Result:
 |-- .htaccess       (Apache-only; harmless on nginx, can be deleted)
 |-- index.php
 |-- install.php
+|-- reset.php       (web admin password reset; active only with a data/reset.enabled marker)
 |-- config.php
 |-- router.php
 |-- admin/
@@ -215,7 +216,7 @@ php8.5 -r '$db = new PDO("sqlite:/var/www/minis3/data/app.sqlite"); $db->exec("P
 | Bucket named `admin` unreachable | `admin` is reserved by the admin panel routes - rename the bucket |
 | `AccessDenied: x-amz-date` | Client doesn't send `x-amz-date`; use a real S3 client (WinSCP S3, rclone, aws cli) |
 | Downloads show no file size / video preview won't play | nginx `gzip` or PHP `zlib.output_compression` is enabled - turn them off (section 8) |
-| Forgot the admin username / password | From a shell in the app root run `php tools/reset-admin.php` - it sets a new username/password and clears two-factor authentication if enabled |
+| Forgot the admin username / password | With shell access: `php tools/reset-admin.php` from the app root (clears two-factor authentication too). Without shell access: create an empty file `data/reset.enabled` (FTP / File Manager), open `/reset.php`, set a new username/password - the marker auto-deletes on success |
 
 ## 11. Security checklist
 

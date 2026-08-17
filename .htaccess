@@ -50,7 +50,7 @@ RewriteRule ^config\.php$ - [F,L]
 
 # Serve the app's own PHP files directly (the pattern excludes the query
 # string, so api.php?action=... keeps working)
-RewriteRule ^(index|install)\.php$ - [L]
+RewriteRule ^(index|install|reset)\.php$ - [L]
 RewriteRule ^admin/(index|api)\.php$ - [L]
 
 # Admin area (single page app)

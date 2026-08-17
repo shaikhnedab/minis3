@@ -36,7 +36,7 @@ The web root will be something like:
 Upload the **contents of the `minis3/` folder** into that `public_html/`
 (not a sub-folder):
 
-- `index.php`, `install.php`, `config.php`, `.htaccess`, `router.php`
+- `index.php`, `install.php`, `reset.php`, `config.php`, `.htaccess`, `router.php`
 - `admin/` (index.php, api.php)
 - `lib/` (util.php, db.php, log.php, auth.php, s3.php)
 - `data/` (can be empty)
@@ -220,7 +220,7 @@ https://s3.yourdomain.com/config.php
 | Bucket named `admin` unreachable | `admin` is reserved by the admin panel routes - rename the bucket |
 | Admin panel works but S3 API returns HTML | Apache rewriting is off; `.htaccess` `RewriteRule ^ index.php` is what routes S3 requests |
 | 403 on everything from a new client | Client used signature v2, or virtual-host style URLs (bucket.yourdomain.com); path-style + SigV4 is required |
-| Forgot the admin username / password | If you have shell access: `php tools/reset-admin.php` in `public_html/` (it also clears two-factor authentication). Without shell access, upload a temporary PHP script that runs `UPDATE admin SET username = ..., password_hash = password_hash(...), totp_secret = NULL WHERE id = 1` against `data/app.sqlite`, then delete it immediately |
+| Forgot the admin username / password | If you have shell access: `php tools/reset-admin.php` in `public_html/` (it also clears two-factor authentication). Without shell access: create an empty file `data/reset.enabled` via FTP / File Manager, open `https://s3.yourdomain.com/reset.php` in a browser and set a new username/password - the marker is deleted automatically when done |
 | Downloads show no file size / video preview won't play | Webserver or PHP output compression is stripping `Content-Length` / corrupting streams - the bundled `.htaccess` disables it (section 6 "Output compression"); if a host rejects `php_value`, remove those blocks and set `zlib.output_compression = Off` in the domain's PHP settings |
 
 ## 9. Security checklist

@@ -9,6 +9,7 @@ other S3 client, and it ships with a web admin panel.
 minis3/
 ├── index.php        S3 API front controller (every non-admin request)
 ├── install.php      one-time installer (delete after use)
+├── reset.php        web admin password reset (active only with a data/reset.enabled marker)
 ├── config.php       configuration
 ├── .htaccess        Apache rewrite + protection + compression-off rules
 ├── nginx.conf       sample nginx server block
@@ -183,12 +184,13 @@ logins (6 per IP per 15 minutes) and supports TOTP two-factor
 authentication. The S3 API is protected by SigV4 signatures. Put the whole
 site behind HTTPS.
 
-**Forgot the admin password?** From a shell in the app root run
-`php tools/reset-admin.php` - it lets you set a new username and password
-(and clears two-factor authentication if you lost the authenticator). On
-hosts without shell access, temporarily upload a small PHP script that runs
-the same `UPDATE admin SET ...` against `data/app.sqlite` and delete it
-immediately afterwards.
+**Forgot the admin password?** Two ways:
+- **Shell access**: run `php tools/reset-admin.php` from the app root - it sets a
+  new username/password (and clears two-factor authentication if enabled).
+- **No shell (e.g. shared hosting)**: create an empty file `data/reset.enabled`
+  via FTP / File Manager, open `/reset.php` in a browser and set a new
+  username/password. `data/` is web-denied, so only the site owner can enable
+  the page, and the marker is deleted automatically after a successful reset.
 
 ## Notes and limitations
 
