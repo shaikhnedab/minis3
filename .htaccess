@@ -44,7 +44,7 @@ php_value zlib.output_compression Off
 RewriteEngine On
 
 # Block direct access to internal directories and configuration
-RewriteRule ^(data|lib|tests)(/|$) - [F,L]
+RewriteRule ^(data|lib|tests|tools)(/|$) - [F,L]
 RewriteRule ^\.git(/|$) - [F,L]
 RewriteRule ^config\.php$ - [F,L]
 

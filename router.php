@@ -8,7 +8,7 @@ declare(strict_types=1);
 $uri = parse_url($_SERVER['REQUEST_URI'], PHP_URL_PATH) ?? '/';
 
 if ($uri === '/config.php' || strpos($uri, '/data/') === 0 || strpos($uri, '/lib/') === 0 || strpos($uri, '/tests/') === 0
-    || strpos($uri, '/.git') === 0 || substr($uri, -16) === 'Zone.Identifier') {
+    || strpos($uri, '/tools/') === 0 || strpos($uri, '/.git') === 0 || substr($uri, -16) === 'Zone.Identifier') {
     http_response_code(403);
     exit('Forbidden');
 }

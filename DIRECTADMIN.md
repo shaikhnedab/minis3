@@ -40,6 +40,8 @@ Upload the **contents of the `minis3/` folder** into that `public_html/`
 - `admin/` (index.php, api.php)
 - `lib/` (util.php, db.php, log.php, auth.php, s3.php)
 - `data/` (can be empty)
+- `tools/` (optional - contains `reset-admin.php`, the CLI password reset
+  tool; it is web-denied by `.htaccess` and refuses to run from a browser)
 - `tests/` is optional - skip it or delete it
 
 Use SFTP (FileZilla / WinSCP) or DirectAdmin's File Manager. If you use the
@@ -218,6 +220,7 @@ https://s3.yourdomain.com/config.php
 | Bucket named `admin` unreachable | `admin` is reserved by the admin panel routes - rename the bucket |
 | Admin panel works but S3 API returns HTML | Apache rewriting is off; `.htaccess` `RewriteRule ^ index.php` is what routes S3 requests |
 | 403 on everything from a new client | Client used signature v2, or virtual-host style URLs (bucket.yourdomain.com); path-style + SigV4 is required |
+| Forgot the admin username / password | If you have shell access: `php tools/reset-admin.php` in `public_html/` (it also clears two-factor authentication). Without shell access, upload a temporary PHP script that runs `UPDATE admin SET username = ..., password_hash = password_hash(...), totp_secret = NULL WHERE id = 1` against `data/app.sqlite`, then delete it immediately |
 | Downloads show no file size / video preview won't play | Webserver or PHP output compression is stripping `Content-Length` / corrupting streams - the bundled `.htaccess` disables it (section 6 "Output compression"); if a host rejects `php_value`, remove those blocks and set `zlib.output_compression = Off` in the domain's PHP settings |
 
 ## 9. Security checklist

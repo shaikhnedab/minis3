@@ -18,6 +18,8 @@ minis3/
 │   └── api.php      admin JSON API
 ├── lib/             util, db, log, auth (SigV4), s3 handlers
 ├── data/            object storage + SQLite database (web access denied)
+├── tools/
+│   └── reset-admin.php  CLI password reset for the admin account (web-denied)
 └── tests/smoke.php  end-to-end API test
 ```
 
@@ -180,6 +182,13 @@ The admin panel uses PHP sessions plus a CSRF token, rate-limits failed
 logins (6 per IP per 15 minutes) and supports TOTP two-factor
 authentication. The S3 API is protected by SigV4 signatures. Put the whole
 site behind HTTPS.
+
+**Forgot the admin password?** From a shell in the app root run
+`php tools/reset-admin.php` - it lets you set a new username and password
+(and clears two-factor authentication if you lost the authenticator). On
+hosts without shell access, temporarily upload a small PHP script that runs
+the same `UPDATE admin SET ...` against `data/app.sqlite` and delete it
+immediately afterwards.
 
 ## Notes and limitations
 
