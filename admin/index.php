@@ -206,7 +206,8 @@ button.hidden,.hidden{display:none !important}
 }
 .card h2{font-size:24px;font-weight:400;margin-bottom:4px}
 .card h3{font-size:16px;font-weight:500;letter-spacing:.1px}
-.stat-panel{margin:0;max-width:none;animation:fadeUp .3s var(--ease-standard) both}
+.stat-panel{margin:0;max-width:none;min-width:0;animation:fadeUp .3s var(--ease-standard) both}
+#topUsers,#recentActivity{min-width:0}
 .muted{color:var(--on-surface-var)}
 .error{color:var(--error);margin-top:10px;font-size:13px}
 
@@ -456,13 +457,13 @@ input[type="checkbox"].rowcheck{width:18px;height:18px;cursor:pointer;accent-col
 }
 .chart .bar:hover{filter:brightness(1.12)}
 .chart .h{font-size:9.5px;color:var(--on-surface-var);margin-top:6px;white-space:nowrap;overflow:hidden}
-.tu-row{display:flex;align-items:center;gap:10px;padding:5px 0;font-size:13.5px}
-.tu-row>span:first-child{width:130px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:500}
-.tu-bar{flex:1;height:6px;background:var(--surface-2);border-radius:999px;overflow:hidden}
+.tu-row{display:flex;align-items:center;gap:10px;padding:5px 0;font-size:13.5px;min-width:0}
+.tu-row>span:first-child{width:130px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:500;flex:none}
+.tu-bar{flex:1;height:6px;background:var(--surface-2);border-radius:999px;overflow:hidden;min-width:0}
 .tu-bar div{height:100%;width:0;background:var(--primary);border-radius:999px;transition:width .6s var(--ease-emph)}
-.ra-row{display:flex;align-items:center;gap:8px;padding:7px 0;border-bottom:1px solid var(--outline-var);font-size:13px}
+.ra-row{display:flex;align-items:center;gap:8px;padding:7px 0;border-bottom:1px solid var(--outline-var);font-size:13px;min-width:0}
 .ra-row:last-child{border-bottom:0}
-.ra-uri{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--on-surface)}
+.ra-uri{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--on-surface)}
 .files-meta{color:var(--on-surface-var);font-size:13px;background:var(--surface-2);border-radius:999px;padding:5px 12px;white-space:nowrap}
 
 /* empty states */
@@ -579,6 +580,7 @@ body.busy .grid tbody,body.busy .cards,body.busy .stat-panel{opacity:.55;transit
 /* ============ responsive ============ */
 @media(max-width:900px){.fab .fab-lbl{display:none}.fab{padding:0;justify-content:center}}
 @media(max-width:768px){
+    body{overflow-x:hidden}
     #appBar{padding:8px 12px}
     .brand-title{font-size:15px}
     .brand-sub{display:none}
@@ -2000,7 +2002,7 @@ function renderFiles() {
             const name = o.key.slice(state.prefix.length);
             visibleKeys.push(o.key);
             tb.insertAdjacentHTML('beforeend',
-                '<tr' + (state.sel.has(o.key) ? ' class="sel"' : '') + '>' +
+                '<tr data-key="' + esc(o.key) + '"' + (state.sel.has(o.key) ? ' class="sel"' : '') + '>' +
                 '<td><input type="checkbox" class="rowcheck" data-key="' + esc(o.key) + '"' + (state.sel.has(o.key) ? ' checked' : '') + '></td>' +
                 '<td><span class="cellname">' + fileIcon(o.key) + '<span class="nm" title="' + esc(name) + '">' + esc(name) + '</span></span></td>' +
                 '<td class="muted">' + esc(fmtBytes(o.size)) + '</td>' +
@@ -2117,6 +2119,27 @@ $('#fileGrid').addEventListener('contextmenu', e => {
     if (!card) return;
     e.preventDefault();
     openRowMenu(card, card.dataset.key, e);
+});
+
+// ---------- double-click preview ----------
+function previewObjectByKey(key) {
+    const o = state.objects.find(x => x.key === key);
+    if (!o) return;
+    const vt = fileViewType(o);
+    if (vt === 'text') openTextEditor(key);
+    else if (vt) openMediaView(key, vt);
+}
+
+$('#filesTbody').addEventListener('dblclick', e => {
+    const tr = e.target.closest('tr[data-key]');
+    if (!tr || tr.classList.contains('dir')) return;
+    previewObjectByKey(tr.dataset.key);
+});
+
+$('#fileGrid').addEventListener('dblclick', e => {
+    const card = e.target.closest('.gcard[data-key]');
+    if (!card || card.dataset.folder || card.dataset.up) return;
+    previewObjectByKey(card.dataset.key);
 });
 
 /* ---------- context menu for file rows ---------- */

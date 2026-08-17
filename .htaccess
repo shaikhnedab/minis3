@@ -1,5 +1,14 @@
 Options -Indexes
 
+# Never compress streamed downloads (video/audio/PDF previews and ZIPs) - the
+# admin API serves raw media and Range/206 responses; compression corrupts them.
+<IfModule mod_setenvif.c>
+SetEnvIf Request_URI "^/admin/api\.php" no-gzip=1
+</IfModule>
+<IfModule mod_deflate.c>
+SetEnvIfNoCase Request_URI "^/admin/api\.php" no-gzip
+</IfModule>
+
 <IfModule mod_rewrite.c>
 RewriteEngine On
 

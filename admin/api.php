@@ -443,6 +443,11 @@ function admin_route(string $method, string $action): void
             header('Content-Length: ' . $size);
             header('Content-Disposition: ' . ($inline ? 'inline' : 'attachment') . '; filename="' . addslashes(basename($key)) . '"');
             set_time_limit(0);
+            @ini_set('zlib.output_compression', 'Off');
+            @ini_set('output_buffering', 'Off');
+            while (ob_get_level() > 0) {
+                ob_end_clean();
+            }
             readfile($path);
             exit;
 
@@ -1078,8 +1083,13 @@ function admin_prune_dirs(string $dir, string $stopAt): void
 function admin_stream_file(string $path, int $start, int $end): void
 {
     set_time_limit(0);
+    // Never let output compression (zlib / mod_deflate) touch streamed media:
+    // it corrupts Range/206 responses and makes video/audio preview fail on
+    // hosts that enable it (e.g. shared hosting like DirectAdmin).
+    @ini_set('zlib.output_compression', 'Off');
+    @ini_set('output_buffering', 'Off');
     while (ob_get_level() > 0) {
-        ob_end_flush();
+        ob_end_clean();
     }
     $fp = @fopen($path, 'rb');
     if ($fp === false) {
@@ -1612,8 +1622,10 @@ function admin_uploads(string $method): void
 // Streams $entries (list of [absolutePath, zipName]) as a ZIP archive and exits.
 function admin_zip_stream(array $entries, string $zipName): void
 {
+    @ini_set('zlib.output_compression', 'Off');
+    @ini_set('output_buffering', 'Off');
     while (ob_get_level() > 0) {
-        ob_end_flush();
+        ob_end_clean();
     }
     header('Content-Type: application/zip');
     header('Content-Disposition: attachment; filename="' . addslashes($zipName) . '"');
