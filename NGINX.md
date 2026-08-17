@@ -61,6 +61,8 @@ Result:
 |-- admin/
 |-- lib/
 |-- data/
+|-- tools/          (optional - reset-admin.php, CLI admin password reset;
+|                    web access is denied by the bundled nginx.conf)
 ```
 
 ## 3. Configure nginx
@@ -213,6 +215,7 @@ php8.5 -r '$db = new PDO("sqlite:/var/www/minis3/data/app.sqlite"); $db->exec("P
 | Bucket named `admin` unreachable | `admin` is reserved by the admin panel routes - rename the bucket |
 | `AccessDenied: x-amz-date` | Client doesn't send `x-amz-date`; use a real S3 client (WinSCP S3, rclone, aws cli) |
 | Downloads show no file size / video preview won't play | nginx `gzip` or PHP `zlib.output_compression` is enabled - turn them off (section 8) |
+| Forgot the admin username / password | From a shell in the app root run `php tools/reset-admin.php` - it sets a new username/password and clears two-factor authentication if enabled |
 
 ## 11. Security checklist
 
