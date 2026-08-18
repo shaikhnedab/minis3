@@ -9,6 +9,7 @@ require APP_ROOT . '/lib/util.php';
 require APP_ROOT . '/lib/db.php';
 require APP_ROOT . '/lib/auth.php';
 require APP_ROOT . '/lib/s3.php';
+require APP_ROOT . '/lib/webauthn.php';
 require APP_ROOT . '/lib/log.php';
 
 db_init();
@@ -130,7 +131,7 @@ function admin_route(string $method, string $action): void
             if ($row === false) {
                 admin_err('Admin account not initialized. Run install.php first.', 500);
             }
-            admin_ok(['csrf' => $_SESSION['csrf'], 'username' => $row['username'], 'log_s3' => (int)$row['log_s3'], 'log_admin' => (int)$row['log_admin'], 'totp' => (string)$row['totp_secret'] !== '', 'trash_days' => (int)$row['trash_days'], 'app_name' => app_name(), 'favicon' => favicon_ext()]);
+            admin_ok(['csrf' => $_SESSION['csrf'], 'username' => $row['username'], 'log_s3' => (int)$row['log_s3'], 'log_admin' => (int)$row['log_admin'], 'totp' => (string)$row['totp_secret'] !== '', 'trash_days' => (int)$row['trash_days'], 'app_name' => app_name(), 'favicon' => favicon_ext(), 'version' => APP_VERSION]);
 
         case 'logout':
             $_SESSION = [];
@@ -148,7 +149,7 @@ function admin_route(string $method, string $action): void
             if ($row === false) {
                 admin_err('Admin account not initialized. Run install.php first.', 500);
             }
-            admin_ok(['csrf' => $_SESSION['csrf'], 'username' => $row['username'], 'log_s3' => (int)$row['log_s3'], 'log_admin' => (int)$row['log_admin'], 'totp' => (string)$row['totp_secret'] !== '', 'trash_days' => (int)$row['trash_days'], 'app_name' => app_name(), 'favicon' => favicon_ext()]);
+            admin_ok(['csrf' => $_SESSION['csrf'], 'username' => $row['username'], 'log_s3' => (int)$row['log_s3'], 'log_admin' => (int)$row['log_admin'], 'totp' => (string)$row['totp_secret'] !== '', 'trash_days' => (int)$row['trash_days'], 'app_name' => app_name(), 'favicon' => favicon_ext(), 'version' => APP_VERSION]);
 
         case 'folders':
             admin_require_login();
@@ -472,6 +473,36 @@ function admin_route(string $method, string $action): void
             admin_stats();
             return;
 
+        case 'passkey_start':
+            admin_require_login();
+            admin_require_csrf();
+            admin_passkey_begin('register');
+            admin_ok(admin_passkey_options());
+
+        case 'passkey_register':
+            admin_require_login();
+            admin_require_csrf();
+            admin_passkey_register();
+
+        case 'passkey_challenge':
+            admin_passkey_begin('login');
+            admin_ok(['challenge' => $_SESSION['passkey_challenge']['c'], 'rp_id' => admin_rp_id()]);
+
+        case 'passkey_login':
+            admin_passkey_login();
+
+        case 'passkeys':
+            admin_require_login();
+            admin_ok(db()->query('SELECT id, name, created_at, last_used FROM admin_passkeys ORDER BY id')->fetchAll());
+
+        case 'passkey_delete':
+            admin_require_login();
+            admin_require_csrf();
+            $data = admin_post_array();
+            $id = (int)($data['id'] ?? 0);
+            db()->prepare('DELETE FROM admin_passkeys WHERE id = ?')->execute([$id]);
+            admin_ok();
+
         default:
             admin_err('Unknown action: ' . $action, 404);
     }
@@ -480,6 +511,158 @@ function admin_route(string $method, string $action): void
 function admin_username_valid(string $u): bool
 {
     return preg_match('/^[a-zA-Z0-9._-]{1,64}$/', $u) === 1 && $u !== '.' && $u !== '..';
+}
+
+/* ---------------- passkeys (WebAuthn) ---------------- */
+
+function admin_post_array(): array
+{
+    $raw = (string)file_get_contents('php://input');
+    if ($raw !== '') {
+        $j = json_decode($raw, true);
+        if (is_array($j)) {
+            return $j;
+        }
+    }
+    return $_POST;
+}
+
+// The WebAuthn RP ID is the hostname without a port; the origin is the full
+// scheme://host as the browser sees it (reusing the HTTPS/proxy detection).
+function admin_rp_id(): string
+{
+    $host = (string)($_SERVER['HTTP_HOST'] ?? 'localhost');
+    return strtolower((string)parse_url('http://' . $host, PHP_URL_HOST));
+}
+
+function admin_origin(): string
+{
+    $https = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off')
+        || (($_SERVER['HTTP_X_FORWARDED_PROTO'] ?? '') === 'https');
+    return ($https ? 'https' : 'http') . '://' . (string)($_SERVER['HTTP_HOST'] ?? 'localhost');
+}
+
+// Stores a single-use, 5-minute challenge in the session.
+function admin_passkey_begin(string $kind): void
+{
+    $_SESSION['passkey_challenge'] = ['c' => webauthn_challenge(), 't' => time(), 'k' => $kind];
+}
+
+function admin_passkey_consume(string $kind): string
+{
+    $pc = $_SESSION['passkey_challenge'] ?? null;
+    unset($_SESSION['passkey_challenge']);
+    if (!is_array($pc) || ($pc['k'] ?? '') !== $kind || empty($pc['c']) || (int)($pc['t'] ?? 0) < time() - 300) {
+        admin_err('Passkey challenge expired. Try again.', 400);
+    }
+    return (string)$pc['c'];
+}
+
+function admin_passkey_handle(): string
+{
+    $h = (string)db()->query('SELECT passkey_handle FROM admin WHERE id = 1')->fetchColumn();
+    if ($h === '') {
+        $h = webauthn_b64url_encode(random_bytes(16));
+        db()->exec('UPDATE admin SET passkey_handle = ' . db()->quote($h) . ' WHERE id = 1');
+    }
+    return $h;
+}
+
+// Registration options for navigator.credentials.create().
+function admin_passkey_options(): array
+{
+    $uname = (string)db()->query('SELECT username FROM admin WHERE id = 1')->fetchColumn();
+    return [
+        'challenge' => $_SESSION['passkey_challenge']['c'],
+        'rp_id' => admin_rp_id(),
+        'rp_name' => app_name(),
+        'user' => ['id' => admin_passkey_handle(), 'name' => $uname, 'displayName' => $uname],
+    ];
+}
+
+function admin_passkey_register(): void
+{
+    $challenge = admin_passkey_consume('register');
+    $data = admin_post_array();
+    $id = (string)($data['id'] ?? '');
+    $clientDataJSON = webauthn_b64url_decode((string)($data['client_data_json'] ?? ''));
+    $attestationObject = webauthn_b64url_decode((string)($data['attestation_object'] ?? ''));
+    $name = trim((string)($data['name'] ?? ''));
+    if ($id === '' || $clientDataJSON === '' || $attestationObject === '') {
+        admin_err('Missing passkey data.', 400);
+    }
+    if ($name === '' || u_strlen($name) > 60) {
+        $name = 'Passkey';
+    }
+    try {
+        $reg = webauthn_verify_registration($clientDataJSON, $attestationObject, $challenge, admin_rp_id(), admin_origin());
+    } catch (S3Exception $e) {
+        admin_err($e->getMessage(), 400);
+    }
+    if (!hash_equals($id, webauthn_b64url_encode($reg['credentialId']))) {
+        admin_err('Passkey credential ID mismatch.', 400);
+    }
+    $st = db()->prepare('SELECT COUNT(*) FROM admin_passkeys WHERE credential_id = ?');
+    $st->execute([$id]);
+    if ((int)$st->fetchColumn() > 0) {
+        admin_err('This passkey is already registered.', 409);
+    }
+    $st = db()->prepare('INSERT INTO admin_passkeys (credential_id, alg, key, sign_count, name, created_at) VALUES (?,?,?,?,?,?)');
+    $st->execute([$id, $reg['alg'], base64_encode($reg['pubkey']), $reg['signCount'], $name, gmdate('Y-m-d H:i:s')]);
+    admin_ok();
+}
+
+function admin_passkey_login(): void
+{
+    $challenge = admin_passkey_consume('login');
+    $data = admin_post_array();
+    $id = (string)($data['id'] ?? '');
+    $clientDataJSON = webauthn_b64url_decode((string)($data['client_data_json'] ?? ''));
+    $authData = webauthn_b64url_decode((string)($data['authenticator_data'] ?? ''));
+    $signature = webauthn_b64url_decode((string)($data['signature'] ?? ''));
+    $userHandle = (string)($data['user_handle'] ?? '');
+    if ($id === '' || $clientDataJSON === '' || $authData === '' || $signature === '') {
+        admin_err('Missing passkey data.', 400);
+    }
+    if ($userHandle !== '') {
+        $decoded = webauthn_b64url_decode($userHandle);
+        if (!hash_equals(admin_passkey_handle(), webauthn_b64url_encode($decoded))) {
+            admin_err('Passkey user mismatch.', 403);
+        }
+    }
+    $st = db()->prepare('SELECT * FROM admin_passkeys WHERE credential_id = ?');
+    $st->execute([$id]);
+    $cred = $st->fetch();
+    if ($cred === false) {
+        admin_err('Passkey not recognized.', 404);
+    }
+    try {
+        $count = webauthn_verify_assertion(
+            $clientDataJSON,
+            $authData,
+            $signature,
+            $challenge,
+            admin_rp_id(),
+            admin_origin(),
+            (string)base64_decode((string)$cred['key'], true),
+            (int)$cred['alg'],
+            (int)$cred['sign_count']
+        );
+    } catch (S3Exception $e) {
+        admin_err($e->getMessage(), 403);
+    }
+    db()->prepare('UPDATE admin_passkeys SET sign_count = ?, last_used = ? WHERE id = ?')
+        ->execute([$count, gmdate('Y-m-d H:i:s'), $cred['id']]);
+
+    // Establish the session exactly like a password login.
+    session_regenerate_id(true);
+    $_SESSION['admin'] = true;
+    $_SESSION['csrf'] = bin2hex(random_bytes(32));
+    $row = db()->query('SELECT username, log_s3, log_admin, totp_secret, trash_days FROM admin WHERE id = 1')->fetch();
+    if ($row === false) {
+        admin_err('Admin account not initialized. Run install.php first.', 500);
+    }
+    admin_ok(['csrf' => $_SESSION['csrf'], 'username' => $row['username'], 'log_s3' => (int)$row['log_s3'], 'log_admin' => (int)$row['log_admin'], 'totp' => (string)$row['totp_secret'] !== '', 'trash_days' => (int)$row['trash_days'], 'app_name' => app_name(), 'favicon' => favicon_ext(), 'version' => APP_VERSION]);
 }
 
 function admin_users(string $method): void

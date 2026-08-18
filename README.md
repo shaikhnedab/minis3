@@ -17,7 +17,7 @@ minis3/
 ├── admin/
 │   ├── index.php    admin panel (users, buckets, files, logs, settings)
 │   └── api.php      admin JSON API
-├── lib/             util, db, log, auth (SigV4), s3 handlers
+├── lib/             util, db, log, auth (SigV4), s3 handlers, webauthn (passkeys)
 ├── data/            object storage + SQLite database (web access denied)
 ├── tools/
 │   └── reset-admin.php  CLI password reset for the admin account (web-denied)
@@ -43,6 +43,10 @@ minis3/
   temp files, no PHP extensions required.
 - Admin **two-factor authentication** (TOTP / authenticator apps) and login
   rate limiting (6 failed attempts per IP per 15 minutes).
+- Admin **passkeys** (WebAuthn): passwordless sign-in with Face ID, Windows
+  Hello, a security key or a password manager - pure PHP, no extra
+  dependencies (ES256 / RS256 / Ed25519 authenticators supported). Passkeys
+  are additional to the password + 2FA login, not a replacement.
 - **Branding**: rename the app (title, header, install page, 2FA issuer) and
   upload a custom favicon (PNG/GIF/JPG/SVG/ICO/WebP) from Settings - served
   at `/favicon.ico`.
@@ -177,12 +181,14 @@ follows your system preference.
 | Buckets    | Add / rename / delete buckets per user; browse files (list or grid view with image thumbnails), upload (button, drag & drop or paste), download, preview/edit text, share presigned links, download folders as ZIP, bulk move/copy/delete |
 | Logs       | Inspect every request with filters (user, kind, method, status) and search        |
 | Trash      | Restore or purge admin-deleted files (retention configurable in Settings)         |
-| Settings   | Branding (app name + favicon), logging toggles, trash retention, admin 2FA (TOTP), multipart-upload cleanup, password change |
+| Settings   | Branding (app name + favicon), logging toggles, trash retention, admin 2FA (TOTP), passkeys (WebAuthn), multipart-upload cleanup, password change |
 
 The admin panel uses PHP sessions plus a CSRF token, rate-limits failed
 logins (6 per IP per 15 minutes) and supports TOTP two-factor
-authentication. The S3 API is protected by SigV4 signatures. Put the whole
-site behind HTTPS.
+authentication and passkey (WebAuthn) sign-in. The S3 API is protected by
+SigV4 signatures. Put the whole site behind HTTPS - passkeys additionally
+require a secure context (HTTPS or localhost), so the "Sign in with
+passkey" button only appears when the browser allows it.
 
 **Forgot the admin password?** Two ways:
 - **Shell access**: run `php tools/reset-admin.php` from the app root - it sets a
@@ -234,3 +240,12 @@ site behind HTTPS.
 - Check `data/` permissions after upload: the directory and its contents must
   not be readable by the web server (the bundled `.htaccess` denies it on
   Apache; the nginx sample denies it too).
+
+## Releases
+
+Every commit is released on GitHub with a version bump: the commit itself
+sets `APP_VERSION` in `config.php` (shown in the admin Settings footer) and
+is tagged `vX.Y.Z` (patch bump per commit, starting at 1.0.0), then pushed
+with the tag. Each GitHub Release includes the full **source code** (the
+auto-generated zip/tar.gz of the tag - `data/` is gitignored, so live
+objects and the database are never included).

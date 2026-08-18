@@ -207,7 +207,7 @@ button.hidden,.hidden{display:none !important}
 .card h2{font-size:24px;font-weight:400;margin-bottom:4px}
 .card h3{font-size:16px;font-weight:500;letter-spacing:.1px}
 .stat-panel{margin:0;max-width:none;min-width:0;animation:fadeUp .3s var(--ease-standard) both}
-#topUsers,#recentActivity{min-width:0}
+#topUsers,#recentActivity{min-width:0;overflow-x:auto;-webkit-overflow-scrolling:touch}
 .muted{color:var(--on-surface-var)}
 .error{color:var(--error);margin-top:10px;font-size:13px}
 
@@ -461,9 +461,9 @@ input[type="checkbox"].rowcheck{width:18px;height:18px;cursor:pointer;accent-col
 .tu-row>span:first-child{width:130px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:500;flex:none}
 .tu-bar{flex:1;height:6px;background:var(--surface-2);border-radius:999px;overflow:hidden;min-width:0}
 .tu-bar div{height:100%;width:0;background:var(--primary);border-radius:999px;transition:width .6s var(--ease-emph)}
-.ra-row{display:flex;align-items:center;gap:8px;padding:7px 0;border-bottom:1px solid var(--outline-var);font-size:13px;min-width:0}
+.ra-row{display:flex;align-items:center;gap:8px;padding:7px 0;border-bottom:1px solid var(--outline-var);font-size:13px;width:max-content;min-width:100%}
 .ra-row:last-child{border-bottom:0}
-.ra-uri{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--on-surface)}
+.ra-uri{flex:0 0 auto;min-width:0;overflow:hidden;white-space:nowrap;color:var(--on-surface)}
 .files-meta{color:var(--on-surface-var);font-size:13px;background:var(--surface-2);border-radius:999px;padding:5px 12px;white-space:nowrap}
 
 /* empty states */
@@ -612,7 +612,6 @@ body.busy .grid tbody,body.busy .cards,body.busy .stat-panel{opacity:.55;transit
     .stat-card{flex-direction:column;align-items:flex-start;gap:10px;padding:14px}
     .stat-value{font-size:20px}
     .stats-grid{grid-template-columns:1fr}
-    .ra-row{flex-wrap:wrap;gap:4px}
     .tu-row>span:first-child{width:96px}
     #toast{width:calc(100% - 24px);left:12px;transform:none;bottom:calc(96px + env(safe-area-inset-bottom))}
     #toast:not(.hidden){animation:toastInMobile .25s var(--ease-emph)}
@@ -671,6 +670,7 @@ body.busy .grid tbody,body.busy .cards,body.busy .stat-panel{opacity:.55;transit
             <label for="loginCode">Two-factor code</label>
           </div>
           <button type="submit" class="btn btn-filled btn-block" style="margin-top:20px">Sign in</button>
+          <button type="button" id="passkeyLoginBtn" class="btn btn-tonal btn-block hidden" style="margin-top:10px"><span class="bi" data-icon="key"></span>Sign in with passkey</button>
           <div id="loginError" class="error hidden"></div>
         </form>
       </div>
@@ -924,6 +924,13 @@ body.busy .grid tbody,body.busy .cards,body.busy .stat-panel{opacity:.55;transit
             <button type="submit" class="btn btn-danger">Disable 2FA</button>
           </form>
         </div>
+        <div class="card" style="margin:0 0 16px;max-width:480px">
+          <h3>Passkeys</h3>
+          <p class="muted" style="margin:2px 0 10px">Sign in without a password using a passkey (Face ID, Windows Hello, security key or password manager). Passkeys work in addition to the password and 2FA.</p>
+          <div id="passkeyList"></div>
+          <button id="addPasskeyBtn" class="btn btn-tonal"><span class="bi" data-icon="key"></span>Add passkey</button>
+          <div id="passkeyError" class="error hidden"></div>
+        </div>
         <div class="card" style="margin:0;max-width:640px">
           <div class="toolbar" style="margin-bottom:10px">
             <h3 style="flex:1">In-progress multipart uploads</h3>
@@ -936,6 +943,7 @@ body.busy .grid tbody,body.busy .cards,body.busy .stat-panel{opacity:.55;transit
             <tbody id="uploadsTbody"></tbody>
           </table></div>
         </div>
+        <p class="muted" style="margin:18px 0 0;font-size:12.5px;text-align:center">MiniS3 v<span id="appVersion"></span></p>
       </section>
     </div>
   </main>
@@ -961,12 +969,67 @@ const state = { csrf: '', users: [], userId: 0, bucketId: 0, prefix: '', buckets
     objView: 'list', userSort: { col: 'username', dir: 'asc' }, bucketSort: { col: 'name', dir: 'asc' },
     logs: [], logTotal: 0, logPage: 1, logPages: 1, logPerPage: 100,
     trash: [], trashTotal: 0, trashPage: 1, trashPages: 1, trashPerPage: 50, trashEnabled: true,
-    totp: false };
+    totp: false, version: '' };
 
 const $ = (sel, el) => (el || document).querySelector(sel);
 const $$ = (sel, el) => Array.from((el || document).querySelectorAll(sel));
 const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const maskKey = s => s ? String(s).slice(0, 4) + '...' + String(s).slice(-4) : '';
+
+/* ---------- passkeys (WebAuthn) helpers ---------- */
+function passkeySupported() {
+    return !!(window.PublicKeyCredential && navigator.credentials && window.isSecureContext);
+}
+function bufToB64url(buf) {
+    const bytes = new Uint8Array(buf);
+    let s = '';
+    for (let i = 0; i < bytes.length; i++) s += String.fromCharCode(bytes[i]);
+    return btoa(s).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+}
+function b64urlToU8(s) {
+    s = String(s).replace(/-/g, '+').replace(/_/g, '/');
+    while (s.length % 4) s += '=';
+    const bin = atob(s);
+    const u = new Uint8Array(bin.length);
+    for (let i = 0; i < bin.length; i++) u[i] = bin.charCodeAt(i);
+    return u;
+}
+async function loginWithPasskey() {
+    const btn = $('#passkeyLoginBtn');
+    const err = $('#loginError');
+    err.classList.add('hidden');
+    btn.disabled = true;
+    try {
+        const d = await api('passkey_challenge', { csrf: false });
+        const cred = await navigator.credentials.get({
+            publicKey: {
+                challenge: b64urlToU8(d.challenge),
+                rpId: d.rp_id,
+                userVerification: 'preferred',
+                allowCredentials: []
+            }
+        });
+        const resp = cred.response;
+        const payload = await api('passkey_login', { csrf: false, json: {
+            id: cred.id,
+            client_data_json: bufToB64url(resp.clientDataJSON),
+            authenticator_data: bufToB64url(resp.authenticatorData),
+            signature: bufToB64url(resp.signature),
+            user_handle: resp.userHandle ? bufToB64url(resp.userHandle) : null
+        }});
+        state.csrf = payload.csrf;
+        $('#loginPassword').value = '';
+        showApp(payload.username, payload);
+        applyLogSettings(payload.log_s3, payload.log_admin);
+    } catch (e) {
+        if (e.name === 'NotAllowedError' || e.name === 'AbortError' || e.name === 'NotSupportedError') return;
+        err.textContent = (e.data && e.data.error) || e.message || 'Passkey sign-in failed';
+        err.classList.remove('hidden');
+    } finally {
+        btn.disabled = false;
+    }
+}
+$('#passkeyLoginBtn').addEventListener('click', loginWithPasskey);
 
 /* ---------- inline icon set (stroke style, 24px grid) ---------- */
 const ICONS = {
@@ -1310,6 +1373,10 @@ async function boot() {
 function showApp(uname, opts) {
     opts = opts || {};
     state.totp = !!opts.totp;
+    if (opts.version) {
+        state.version = opts.version;
+        $('#appVersion').textContent = opts.version;
+    }
     if (opts.trash_days !== undefined) {
         state.trashEnabled = Number(opts.trash_days) > 0;
         $('#trashDays').value = Number(opts.trash_days);
@@ -1351,6 +1418,7 @@ function showLogin() {
     $('#logoutBtn').classList.add('hidden');
     $('#headerUser').classList.add('hidden');
     $('#headerUser').textContent = '';
+    $('#passkeyLoginBtn').classList.toggle('hidden', !passkeySupported());
 }
 
 $('#loginForm').addEventListener('submit', async ev => {
@@ -1423,7 +1491,7 @@ function activateTab(tab, updateHash) {
     if (tab === 'buckets') loadBuckets().then(maybeRestoreFilesView);
     if (tab === 'logs') loadLogs();
     if (tab === 'trash') loadTrash();
-    if (tab === 'settings') { renderTotpStatus(); loadUploadsPanel(); }
+    if (tab === 'settings') { renderTotpStatus(); loadUploadsPanel(); loadPasskeys(); }
 }
 
 // Back / forward buttons and manual hash edits switch tabs too.
@@ -3131,6 +3199,82 @@ $('#totpDisableForm').addEventListener('submit', async ev => {
         renderTotpStatus();
         toast('Two-factor authentication disabled', 'ok');
     } catch (err) { toast(err.message, 'err'); }
+});
+
+/* ---------- settings: passkeys ---------- */
+async function loadPasskeys() {
+    let d;
+    try {
+        d = await api('passkeys', { method: 'GET' });
+    } catch (err) { toast(err.message, 'err'); return; }
+    const box = $('#passkeyList');
+    if (!d.length) {
+        box.innerHTML = '<p class="muted" style="margin:0 0 8px">No passkeys yet.</p>';
+        return;
+    }
+    box.innerHTML = d.map(r =>
+        '<div class="ra-row" style="border-bottom:1px solid var(--outline-var);padding:8px 0">' +
+        '<span style="flex:0 0 auto;color:var(--on-surface-var)">' + icon('key', 16) + '</span>' +
+        '<span style="flex:0 0 auto;font-weight:500">' + esc(r.name) + '</span>' +
+        '<span class="muted" style="flex:0 0 auto">' + esc(fmtRel(r.created_at)) + (r.last_used ? ' · used ' + esc(fmtRel(r.last_used)) : '') + '</span>' +
+        '<button class="icon-btn sm danger" data-delpasskey="' + Number(r.id) + '" title="Delete passkey" aria-label="Delete passkey">' + icon('trash', 16) + '</button>' +
+        '</div>').join('');
+}
+
+$('#addPasskeyBtn').addEventListener('click', async () => {
+    const err = $('#passkeyError');
+    err.classList.add('hidden');
+    if (!passkeySupported()) {
+        err.textContent = 'This browser does not support passkeys (HTTPS or localhost is required).';
+        err.classList.remove('hidden');
+        return;
+    }
+    const name = window.prompt('Name for this passkey (e.g. "iPhone 15"):') || '';
+    if (!name) return;
+    try {
+        const d = await api('passkey_start');
+        const cred = await navigator.credentials.create({
+            publicKey: {
+                challenge: b64urlToU8(d.challenge),
+                rp: { id: d.rp_id, name: d.rp_name },
+                user: { id: b64urlToU8(d.user.id), name: d.user.name, displayName: d.user.displayName },
+                pubKeyCredParams: [
+                    { type: 'public-key', alg: -7 },
+                    { type: 'public-key', alg: -257 },
+                    { type: 'public-key', alg: -8 }
+                ],
+                authenticatorSelection: { userVerification: 'preferred', residentKey: 'preferred' },
+                attestation: 'none',
+                timeout: 60000
+            }
+        });
+        const resp = cred.response;
+        await api('passkey_register', { json: {
+            id: cred.id,
+            name,
+            client_data_json: bufToB64url(resp.clientDataJSON),
+            attestation_object: bufToB64url(resp.attestationObject)
+        }});
+        toast('Passkey added', 'ok');
+        await loadPasskeys();
+    } catch (e) {
+        if (e.name === 'NotAllowedError' || e.name === 'AbortError' || e.name === 'NotSupportedError') return;
+        err.textContent = (e.data && e.data.error) || e.message || 'Could not add passkey';
+        err.classList.remove('hidden');
+    }
+});
+
+$('#passkeyList').addEventListener('click', e => {
+    const b = e.target.closest('button[data-delpasskey]');
+    if (!b) return;
+    const id = Number(b.dataset.delpasskey);
+    confirmDialog('Delete this passkey? You will not be able to sign in with it anymore.', 'Delete', async () => {
+        try {
+            await api('passkey_delete', { json: { id } });
+            await loadPasskeys();
+            toast('Passkey deleted', 'ok');
+        } catch (err) { toast(err.message, 'err'); }
+    });
 });
 
 /* ---------- settings: multipart uploads ---------- */

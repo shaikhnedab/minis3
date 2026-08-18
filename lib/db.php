@@ -107,6 +107,20 @@ function db_init(): void
     if (!in_array('favicon', $colNames, true)) {
         $pdo->exec('ALTER TABLE admin ADD COLUMN favicon TEXT');
     }
+    if (!in_array('passkey_handle', $colNames, true)) {
+        $pdo->exec('ALTER TABLE admin ADD COLUMN passkey_handle TEXT');
+    }
+    // Admin passkeys (WebAuthn / passwordless login).
+    $pdo->exec('CREATE TABLE IF NOT EXISTS admin_passkeys (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        credential_id TEXT NOT NULL UNIQUE,
+        alg INTEGER NOT NULL,
+        key TEXT NOT NULL,
+        sign_count INTEGER NOT NULL DEFAULT 0,
+        name TEXT NOT NULL,
+        created_at TEXT NOT NULL,
+        last_used TEXT
+    )');
     // Per-user storage quota in bytes (0 = unlimited).
     $userCols = $pdo->query('PRAGMA table_info(users)')->fetchAll();
     $userColNames = [];
