@@ -35,6 +35,6 @@ define('LOG_REQUESTS', true);
 define('APP_NAME', 'MiniS3');
 
 // App version - bumped with every commit (see README "Releases").
-define('APP_VERSION', '1.0.1');
+define('APP_VERSION', '1.0.2');
 
 date_default_timezone_set('UTC');

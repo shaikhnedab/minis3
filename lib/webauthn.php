@@ -219,10 +219,16 @@ function webauthn_verify_sig(int $alg, string $pubkey, string $data, string $sig
         return sodium_crypto_sign_verify_detached($signature, $data, $pubkey);
     }
     if ($alg === -7) {
-        if (strlen($signature) !== 64) {
+        // Authenticators may return ES256 signatures either as raw R||S
+        // (64 bytes, the original spec form) or DER-encoded; accept both.
+        if (strlen($signature) === 64) {
+            $der = webauthn_ecdsa_raw_to_der($signature);
+        } elseif (strlen($signature) >= 68 && ord($signature[0]) === 0x30) {
+            $der = $signature;
+        } else {
             return false;
         }
-        return openssl_verify($data, webauthn_ecdsa_raw_to_der($signature), webauthn_pubkey_pem($pubkey), OPENSSL_ALGO_SHA256) === 1;
+        return openssl_verify($data, $der, webauthn_pubkey_pem($pubkey), OPENSSL_ALGO_SHA256) === 1;
     }
     if ($alg === -257) {
         return openssl_verify($data, $signature, webauthn_pubkey_pem($pubkey), OPENSSL_ALGO_SHA256) === 1;
@@ -347,7 +353,9 @@ function webauthn_verify_assertion(string $clientDataJSON, string $authenticator
     if (($parsed['flags'] & 0x01) === 0) {
         webauthn_err('Passkey user presence not verified.');
     }
-    if (!webauthn_verify_sig($alg, $pubkey, $clientDataJSON . $authenticatorData, $signature)) {
+    // The authenticator signs over authenticatorData || SHA256(clientDataJSON).
+    $signedData = $authenticatorData . hash('sha256', $clientDataJSON, true);
+    if (!webauthn_verify_sig($alg, $pubkey, $signedData, $signature)) {
         webauthn_err('Passkey signature verification failed.');
     }
     $count = $parsed['signCount'];
