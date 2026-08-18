@@ -206,8 +206,9 @@ button.hidden,.hidden{display:none !important}
 }
 .card h2{font-size:24px;font-weight:400;margin-bottom:4px}
 .card h3{font-size:16px;font-weight:500;letter-spacing:.1px}
-.stat-panel{margin:0;max-width:none;min-width:0;animation:fadeUp .3s var(--ease-standard) both}
-#topUsers,#recentActivity{min-width:0;overflow-x:auto;-webkit-overflow-scrolling:touch}
+.stat-panel{margin:0;max-width:none;min-width:0;width:100%;animation:fadeUp .3s var(--ease-standard) both}
+#recentActivity{min-width:0;overflow-x:auto;-webkit-overflow-scrolling:touch}
+#topUsers{min-width:0}
 .muted{color:var(--on-surface-var)}
 .error{color:var(--error);margin-top:10px;font-size:13px}
 
@@ -621,7 +622,7 @@ body.busy .grid tbody,body.busy .cards,body.busy .stat-panel{opacity:.55;transit
 @keyframes toastInMobile{from{opacity:0;transform:translateY(14px)}to{opacity:1;transform:none}}
 @media(max-width:400px){
     .user-chip{display:none}
-    .card{margin:24px auto;padding:20px}
+    .card:not(.stat-panel){margin:24px auto;padding:20px}
     #main{padding:12px 10px calc(104px + env(safe-area-inset-bottom))}
 }
 </style>
