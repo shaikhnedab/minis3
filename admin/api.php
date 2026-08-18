@@ -476,8 +476,9 @@ function admin_route(string $method, string $action): void
         case 'passkey_start':
             admin_require_login();
             admin_require_csrf();
-            admin_passkey_begin('register');
-            admin_ok(admin_passkey_options());
+            $data = admin_post_array();
+            admin_passkey_begin('register', trim((string)($data['rp_id'] ?? '')));
+            admin_ok(admin_passkey_options($_SESSION['passkey_challenge']['rp_id']));
 
         case 'passkey_register':
             admin_require_login();
@@ -485,8 +486,9 @@ function admin_route(string $method, string $action): void
             admin_passkey_register();
 
         case 'passkey_challenge':
-            admin_passkey_begin('login');
-            admin_ok(['challenge' => $_SESSION['passkey_challenge']['c'], 'rp_id' => admin_rp_id()]);
+            $data = admin_post_array();
+            admin_passkey_begin('login', trim((string)($data['rp_id'] ?? '')));
+            admin_ok(['challenge' => $_SESSION['passkey_challenge']['c'], 'rp_id' => $_SESSION['passkey_challenge']['rp_id']]);
 
         case 'passkey_login':
             admin_passkey_login();
@@ -542,20 +544,28 @@ function admin_origin(): string
     return ($https ? 'https' : 'http') . '://' . (string)($_SERVER['HTTP_HOST'] ?? 'localhost');
 }
 
-// Stores a single-use, 5-minute challenge in the session.
-function admin_passkey_begin(string $kind): void
+// Stores a single-use, 5-minute challenge in the session, bound to the RP ID
+// and origin the browser is actually on (so passkeys work on localhost, any
+// domain, or behind a proxy regardless of how the host is reached).
+function admin_passkey_begin(string $kind, string $rpId): void
 {
-    $_SESSION['passkey_challenge'] = ['c' => webauthn_challenge(), 't' => time(), 'k' => $kind];
+    $_SESSION['passkey_challenge'] = [
+        'c' => webauthn_challenge(),
+        't' => time(),
+        'k' => $kind,
+        'rp_id' => $rpId !== '' ? $rpId : admin_rp_id(),
+        'origin' => admin_origin(),
+    ];
 }
 
-function admin_passkey_consume(string $kind): string
+function admin_passkey_consume(string $kind): array
 {
     $pc = $_SESSION['passkey_challenge'] ?? null;
     unset($_SESSION['passkey_challenge']);
     if (!is_array($pc) || ($pc['k'] ?? '') !== $kind || empty($pc['c']) || (int)($pc['t'] ?? 0) < time() - 300) {
         admin_err('Passkey challenge expired. Try again.', 400);
     }
-    return (string)$pc['c'];
+    return $pc;
 }
 
 function admin_passkey_handle(): string
@@ -569,12 +579,12 @@ function admin_passkey_handle(): string
 }
 
 // Registration options for navigator.credentials.create().
-function admin_passkey_options(): array
+function admin_passkey_options(string $rpId): array
 {
     $uname = (string)db()->query('SELECT username FROM admin WHERE id = 1')->fetchColumn();
     return [
         'challenge' => $_SESSION['passkey_challenge']['c'],
-        'rp_id' => admin_rp_id(),
+        'rp_id' => $rpId,
         'rp_name' => app_name(),
         'user' => ['id' => admin_passkey_handle(), 'name' => $uname, 'displayName' => $uname],
     ];
@@ -582,7 +592,7 @@ function admin_passkey_options(): array
 
 function admin_passkey_register(): void
 {
-    $challenge = admin_passkey_consume('register');
+    $ch = admin_passkey_consume('register');
     $data = admin_post_array();
     $id = (string)($data['id'] ?? '');
     $clientDataJSON = webauthn_b64url_decode((string)($data['client_data_json'] ?? ''));
@@ -595,7 +605,7 @@ function admin_passkey_register(): void
         $name = 'Passkey';
     }
     try {
-        $reg = webauthn_verify_registration($clientDataJSON, $attestationObject, $challenge, admin_rp_id(), admin_origin());
+        $reg = webauthn_verify_registration($clientDataJSON, $attestationObject, $ch['c'], $ch['rp_id'], $ch['origin']);
     } catch (S3Exception $e) {
         admin_err($e->getMessage(), 400);
     }
@@ -614,7 +624,7 @@ function admin_passkey_register(): void
 
 function admin_passkey_login(): void
 {
-    $challenge = admin_passkey_consume('login');
+    $ch = admin_passkey_consume('login');
     $data = admin_post_array();
     $id = (string)($data['id'] ?? '');
     $clientDataJSON = webauthn_b64url_decode((string)($data['client_data_json'] ?? ''));
@@ -641,9 +651,9 @@ function admin_passkey_login(): void
             $clientDataJSON,
             $authData,
             $signature,
-            $challenge,
-            admin_rp_id(),
-            admin_origin(),
+            $ch['c'],
+            $ch['rp_id'],
+            $ch['origin'],
             (string)base64_decode((string)$cred['key'], true),
             (int)$cred['alg'],
             (int)$cred['sign_count']

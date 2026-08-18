@@ -980,6 +980,13 @@ const maskKey = s => s ? String(s).slice(0, 4) + '...' + String(s).slice(-4) : '
 function passkeySupported() {
     return !!(window.PublicKeyCredential && navigator.credentials && window.isSecureContext);
 }
+// Chrome does not accept a bare IP address as a WebAuthn RP ID (only
+// "localhost" or a real domain); give a clear message instead of the opaque
+// "This is an invalid domain." error.
+function passkeyRpIdInvalid() {
+    const h = String(location.hostname || '');
+    return /^\d{1,3}(\.\d{1,3}){3}$/.test(h) || h.indexOf(':') !== -1;
+}
 function bufToB64url(buf) {
     const bytes = new Uint8Array(buf);
     let s = '';
@@ -1000,7 +1007,13 @@ async function loginWithPasskey() {
     err.classList.add('hidden');
     btn.disabled = true;
     try {
-        const d = await api('passkey_challenge', { csrf: false });
+        if (passkeyRpIdInvalid()) {
+            err.textContent = 'Open the site via "localhost" or your real domain - bare IP addresses are not valid passkey domains in Chrome.';
+            err.classList.remove('hidden');
+            return;
+        }
+        const rpId = String(location.hostname || 'localhost');
+        const d = await api('passkey_challenge', { csrf: false, json: { rp_id: rpId } });
         const cred = await navigator.credentials.get({
             publicKey: {
                 challenge: b64urlToU8(d.challenge),
@@ -3232,7 +3245,13 @@ $('#addPasskeyBtn').addEventListener('click', async () => {
     const name = window.prompt('Name for this passkey (e.g. "iPhone 15"):') || '';
     if (!name) return;
     try {
-        const d = await api('passkey_start');
+        if (passkeyRpIdInvalid()) {
+            err.textContent = 'Open the site via "localhost" or your real domain - bare IP addresses are not valid passkey domains in Chrome.';
+            err.classList.remove('hidden');
+            return;
+        }
+        const rpId = String(location.hostname || 'localhost');
+        const d = await api('passkey_start', { json: { rp_id: rpId } });
         const cred = await navigator.credentials.create({
             publicKey: {
                 challenge: b64urlToU8(d.challenge),
