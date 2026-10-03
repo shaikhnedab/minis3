@@ -372,7 +372,11 @@ t_check($st === 200 && $body === 'etag-data', 'Mismatched-ETag complete produced
 s3_request('DELETE', '/' . $bucket . '/etag-tol.bin');
 
 // ---------- storage quota (admin sets 1 MB on the test user) ----------
-if (!empty($csrf) && !empty($adminUserId)) {
+// Only possible when the admin bootstrap ran (fresh install mode); with
+// pre-supplied S3 keys there is no admin session, so quota.bin is skipped and
+// the final object count below is adjusted accordingly.
+$quotaTested = !empty($csrf) && !empty($adminUserId);
+if ($quotaTested) {
     [$st] = http('POST', $endpoint . '/admin/api.php?action=users', ['X-CSRF-Token: ' . $csrf],
         http_build_query(['_sub' => 'update', 'id' => $adminUserId, 'quota_mb' => '1']));
     echo "  set quota -> $st\n";
@@ -401,7 +405,9 @@ t_check($st === 200 && strpos($body, '<Deleted>') !== false && strpos($body, 'No
 t_check($st === 403, 'Bad signature 403');
 
 [$st, , $body] = s3_request('GET', '/' . $bucket . '?list-type=2');
-t_check($st === 200 && strpos($body, '<KeyCount>5</KeyCount>') !== false, '5 objects remain (nested, big.bin, empty.txt, md5.txt, quota.bin)');
+$wantCount = $quotaTested ? 5 : 4;
+$wantNames = $quotaTested ? 'nested, big.bin, empty.txt, md5.txt, quota.bin' : 'nested, big.bin, empty.txt, md5.txt';
+t_check($st === 200 && strpos($body, "<KeyCount>$wantCount</KeyCount>") !== false, "$wantCount objects remain ($wantNames)");
 
 // ---------- presigned PUT / DELETE (query string auth for uploads) ----------
 // This is how game-panel backup daemons (e.g. Pelican Wings) push backups:

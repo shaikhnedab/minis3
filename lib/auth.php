@@ -143,6 +143,9 @@ function s3_authenticate(): array
     if ($user === null) {
         throw new S3Exception('InvalidAccessKeyId', 'The AWS Access Key Id you provided does not exist in our records.', 403);
     }
+    if (!empty($user['disabled'])) {
+        throw new S3Exception('AccessDenied', 'This user account is disabled.', 403);
+    }
 
     $signed = array_map('strtolower', explode(';', $parts['signed_headers']));
     $signed = array_values(array_unique($signed));
@@ -275,6 +278,9 @@ function s3_authenticate_presigned(): ?array
     $user = db_find_user_by_access_key($accessKey);
     if ($user === null) {
         throw new S3Exception('InvalidAccessKeyId', 'The AWS Access Key Id you provided does not exist in our records.', 403);
+    }
+    if (!empty($user['disabled'])) {
+        throw new S3Exception('AccessDenied', 'This user account is disabled.', 403);
     }
 
     $signedHeaders = (string)($_GET['X-Amz-SignedHeaders'] ?? 'host');

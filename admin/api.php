@@ -72,6 +72,17 @@ function admin_require_login(): void
     if (empty($_SESSION['admin'])) {
         admin_err('Not logged in', 401);
     }
+    // Session generation counter: "revoke all other sessions" bumps it, so
+    // stale sessions fail here. Sessions created before the counter existed
+    // adopt the current value instead of being logged out.
+    $ver = (int)db()->query('SELECT session_ver FROM admin WHERE id = 1')->fetchColumn();
+    if (!isset($_SESSION['sess_ver'])) {
+        $_SESSION['sess_ver'] = $ver;
+    } elseif ((int)$_SESSION['sess_ver'] !== $ver) {
+        $_SESSION = [];
+        session_destroy();
+        admin_err('Session revoked. Please sign in again.', 401);
+    }
 }
 
 function admin_require_csrf(): void
@@ -127,7 +138,8 @@ function admin_route(string $method, string $action): void
             session_regenerate_id(true);
             $_SESSION['admin'] = true;
             $_SESSION['csrf'] = bin2hex(random_bytes(32));
-            $row = db()->query('SELECT username, log_s3, log_admin, totp_secret FROM admin WHERE id = 1')->fetch();
+            $_SESSION['sess_ver'] = (int)db()->query('SELECT session_ver FROM admin WHERE id = 1')->fetchColumn();
+            $row = db()->query('SELECT username, log_s3, log_admin, totp_secret, trash_days FROM admin WHERE id = 1')->fetch();
             if ($row === false) {
                 admin_err('Admin account not initialized. Run install.php first.', 500);
             }
@@ -139,9 +151,7 @@ function admin_route(string $method, string $action): void
             admin_ok();
 
         case 'me':
-            if (empty($_SESSION['admin'])) {
-                admin_err('Not logged in', 401);
-            }
+            admin_require_login();
             if (empty($_SESSION['csrf'])) {
                 $_SESSION['csrf'] = bin2hex(random_bytes(32));
             }
@@ -505,6 +515,41 @@ function admin_route(string $method, string $action): void
             db()->prepare('DELETE FROM admin_passkeys WHERE id = ?')->execute([$id]);
             admin_ok();
 
+        case 'logs_export':
+            if ($method !== 'GET') {
+                admin_err('Bad request', 400);
+            }
+            admin_logs_export();
+            return;
+
+        case 'search_all':
+            if ($method !== 'GET') {
+                admin_err('Bad request', 400);
+            }
+            admin_search_all();
+            return;
+
+        case 'backup_export':
+            if ($method !== 'GET') {
+                admin_err('Bad request', 400);
+            }
+            admin_backup_export();
+            return;
+
+        case 'backup_import':
+            if ($method !== 'POST') {
+                admin_err('Bad request', 400);
+            }
+            admin_backup_import();
+            return;
+
+        case 'revoke_sessions':
+            if ($method !== 'POST') {
+                admin_err('Bad request', 400);
+            }
+            admin_revoke_sessions();
+            return;
+
         default:
             admin_err('Unknown action: ' . $action, 404);
     }
@@ -668,6 +713,7 @@ function admin_passkey_login(): void
     session_regenerate_id(true);
     $_SESSION['admin'] = true;
     $_SESSION['csrf'] = bin2hex(random_bytes(32));
+    $_SESSION['sess_ver'] = (int)db()->query('SELECT session_ver FROM admin WHERE id = 1')->fetchColumn();
     $row = db()->query('SELECT username, log_s3, log_admin, totp_secret, trash_days FROM admin WHERE id = 1')->fetch();
     if ($row === false) {
         admin_err('Admin account not initialized. Run install.php first.', 500);
@@ -679,10 +725,11 @@ function admin_users(string $method): void
 {
     admin_require_login();
     if ($method === 'GET') {
-        $rows = db()->query('SELECT u.id, u.username, u.access_key, u.secret_key, u.created_at, u.quota_bytes,
+        $rows = db()->query('SELECT u.id, u.username, u.access_key, u.secret_key, u.created_at, u.quota_bytes, u.disabled,
                 COALESCE((SELECT SUM(o.size) FROM objects o JOIN buckets b ON b.id = o.bucket_id WHERE b.user_id = u.id), 0) AS storage_used,
                 COALESCE((SELECT COUNT(*) FROM objects o JOIN buckets b ON b.id = o.bucket_id WHERE b.user_id = u.id), 0) AS object_count,
-                (SELECT COUNT(*) FROM buckets b2 WHERE b2.user_id = u.id) AS bucket_count
+                (SELECT COUNT(*) FROM buckets b2 WHERE b2.user_id = u.id) AS bucket_count,
+                (SELECT MAX(l.ts) FROM logs l WHERE l.user_id = u.id) AS last_active
             FROM users u ORDER BY u.username')->fetchAll();
         // Daily S3 request counts for the last 14 days, per user (sparklines).
         $usage = [];
@@ -711,7 +758,7 @@ function admin_users(string $method): void
             admin_err('Invalid username (letters, digits, . _ -; max 64 chars).');
         }
         if (db_find_user_by_username($username) !== null) {
-            admin_err('Username already exists.');
+            admin_err('Username already exists.', 409);
         }
         $accessKey = trim((string)($_POST['access_key'] ?? ''));
         $secretKey = trim((string)($_POST['secret_key'] ?? ''));
@@ -767,6 +814,10 @@ function admin_users(string $method): void
             $st = db()->prepare('UPDATE users SET quota_bytes = ? WHERE id = ?');
             $st->execute([$quotaBytes, $id]);
         }
+        if (isset($_POST['disabled'])) {
+            $st = db()->prepare('UPDATE users SET disabled = ? WHERE id = ?');
+            $st->execute([!empty($_POST['disabled']) ? 1 : 0, $id]);
+        }
         if (!empty($_POST['regen_secret'])) {
             $secret = s3_generate_secret_key();
             $st = db()->prepare('UPDATE users SET secret_key = ? WHERE id = ?');
@@ -804,13 +855,15 @@ function admin_buckets(string $method): void
         $userId = (int)($_GET['user_id'] ?? 0);
         if ($userId > 0) {
             $st = db()->prepare('SELECT b.id, b.user_id, b.name, b.created_at, u.username,
-                (SELECT COUNT(*) FROM objects o WHERE o.bucket_id = b.id) AS object_count
+                (SELECT COUNT(*) FROM objects o WHERE o.bucket_id = b.id) AS object_count,
+                (SELECT COALESCE(SUM(o.size), 0) FROM objects o WHERE o.bucket_id = b.id) AS size
                 FROM buckets b JOIN users u ON u.id = b.user_id WHERE b.user_id = ? ORDER BY b.name');
             $st->execute([$userId]);
             admin_ok($st->fetchAll());
         }
         $rows = db()->query('SELECT b.id, b.user_id, b.name, b.created_at, u.username,
-            (SELECT COUNT(*) FROM objects o WHERE o.bucket_id = b.id) AS object_count
+            (SELECT COUNT(*) FROM objects o WHERE o.bucket_id = b.id) AS object_count,
+            (SELECT COALESCE(SUM(o.size), 0) FROM objects o WHERE o.bucket_id = b.id) AS size
             FROM buckets b JOIN users u ON u.id = b.user_id ORDER BY u.username, b.name')->fetchAll();
         admin_ok($rows);
     }
@@ -950,6 +1003,13 @@ function admin_objects(string $method): void
             $sub = (string)$json['_sub'];
         }
     }
+    // JSON-body callers (file details, share links, rename, editor save, bulk
+    // operations, move/copy) send every parameter in the JSON document while
+    // $_POST stays empty. Merge the document in so all handlers below can keep
+    // reading parameters the same way regardless of the encoding.
+    if (is_array($json)) {
+        $_POST = $json + $_POST;
+    }
 
     if ($sub === 'delete') {
         $bucketId = (int)($_POST['bucket_id'] ?? 0);
@@ -1008,6 +1068,9 @@ function admin_objects(string $method): void
         $key = ($prefix !== '' ? rtrim($prefix, '/') . '/' : '') . $name;
         if (!s3_key_valid($key)) {
             admin_err('Invalid file key.');
+        }
+        if (db_find_object($bucketId, $key) !== null) {
+            admin_err('A file with this name already exists.', 409);
         }
         $user = db_find_user((int)$b['user_id']);
         $path = s3_object_path($user['username'], $b['name'], $key);
@@ -1466,6 +1529,44 @@ function admin_transfer(array $user, array $b, string $srcPrefix, array $items, 
     return ['copied' => $copied, 'deleted' => $deleted, 'skipped' => $skipped, 'conflicts' => $conflicts];
 }
 
+function admin_logs_filter(): array
+{
+    $where = [];
+    $args = [];
+    if (!empty($_GET['user_id']) && (int)$_GET['user_id'] > 0) {
+        $where[] = 'l.user_id = ?';
+        $args[] = (int)$_GET['user_id'];
+    }
+    if (!empty($_GET['kind'])) {
+        $where[] = 'l.kind = ?';
+        $args[] = (string)$_GET['kind'];
+    }
+    if (!empty($_GET['method'])) {
+        $where[] = 'l.method = ?';
+        $args[] = (string)$_GET['method'];
+    }
+    if (!empty($_GET['status'])) {
+        $status = (string)$_GET['status'];
+        if ($status === '2xx') {
+            $where[] = 'l.status >= 200 AND l.status < 300';
+        } elseif ($status === '4xx') {
+            $where[] = 'l.status >= 400 AND l.status < 500';
+        } elseif ($status === '5xx') {
+            $where[] = 'l.status >= 500';
+        } else {
+            $where[] = 'l.status = ?';
+            $args[] = (int)$status;
+        }
+    }
+    $q = trim((string)($_GET['q'] ?? ''));
+    if ($q !== '') {
+        $where[] = '(l.uri LIKE ? OR l.ip LIKE ? OR l.method LIKE ? OR l.user_agent LIKE ? OR CAST(l.status AS TEXT) LIKE ?)';
+        $like = '%' . $q . '%';
+        array_push($args, $like, $like, $like, $like, $like);
+    }
+    return [$where ? ' WHERE ' . implode(' AND ', $where) : '', $args];
+}
+
 function admin_logs(string $method): void
 {
     admin_require_login();
@@ -1475,40 +1576,7 @@ function admin_logs(string $method): void
             $perPage = 100;
         }
         $page = max(1, (int)($_GET['page'] ?? 1));
-        $where = [];
-        $args = [];
-        if (!empty($_GET['user_id']) && (int)$_GET['user_id'] > 0) {
-            $where[] = 'l.user_id = ?';
-            $args[] = (int)$_GET['user_id'];
-        }
-        if (!empty($_GET['kind'])) {
-            $where[] = 'l.kind = ?';
-            $args[] = (string)$_GET['kind'];
-        }
-        if (!empty($_GET['method'])) {
-            $where[] = 'l.method = ?';
-            $args[] = (string)$_GET['method'];
-        }
-        if (!empty($_GET['status'])) {
-            $status = (string)$_GET['status'];
-            if ($status === '2xx') {
-                $where[] = 'l.status >= 200 AND l.status < 300';
-            } elseif ($status === '4xx') {
-                $where[] = 'l.status >= 400 AND l.status < 500';
-            } elseif ($status === '5xx') {
-                $where[] = 'l.status >= 500';
-            } else {
-                $where[] = 'l.status = ?';
-                $args[] = (int)$status;
-            }
-        }
-        $q = trim((string)($_GET['q'] ?? ''));
-        if ($q !== '') {
-            $where[] = '(l.uri LIKE ? OR l.ip LIKE ? OR l.method LIKE ? OR l.user_agent LIKE ? OR CAST(l.status AS TEXT) LIKE ?)';
-            $like = '%' . $q . '%';
-            array_push($args, $like, $like, $like, $like, $like);
-        }
-        $whereSql = $where ? ' WHERE ' . implode(' AND ', $where) : '';
+        [$whereSql, $args] = admin_logs_filter();
         $stCount = db()->prepare('SELECT COUNT(*) FROM logs l' . $whereSql);
         $stCount->execute($args);
         $total = (int)$stCount->fetchColumn();
@@ -1533,6 +1601,142 @@ function admin_logs(string $method): void
     admin_err('Bad request', 400);
 }
 
+function admin_logs_export(): void
+{
+    admin_require_login();
+    [$whereSql, $args] = admin_logs_filter();
+    $st = db()->prepare('SELECT l.id, l.ts, l.kind, l.ip, l.method, l.uri, l.status, l.bytes, l.ms, l.user_agent, u.username
+            FROM logs l LEFT JOIN users u ON u.id = l.user_id' . $whereSql . ' ORDER BY l.id DESC LIMIT 10000');
+    $st->execute($args);
+    $rows = $st->fetchAll();
+    $name = 'minis3-logs-' . gmdate('Ymd-His') . '.csv';
+    header('Content-Type: text/csv; charset=utf-8');
+    header('Content-Disposition: attachment; filename="' . $name . '"');
+    header('Cache-Control: no-store');
+    $out = fopen('php://output', 'w');
+    fputcsv($out, ['id', 'time', 'kind', 'user', 'ip', 'method', 'uri', 'status', 'bytes', 'ms', 'user_agent']);
+    foreach ($rows as $r) {
+        fputcsv($out, [$r['id'], $r['ts'], $r['kind'], $r['username'] ?? '', $r['ip'], $r['method'], $r['uri'], $r['status'], $r['bytes'], $r['ms'], $r['user_agent']]);
+    }
+    fclose($out);
+    exit;
+}
+
+function admin_search_all(): void
+{
+    admin_require_login();
+    $q = trim((string)($_GET['q'] ?? ''));
+    if (mb_strlen($q) < 1) {
+        admin_ok(['users' => [], 'buckets' => [], 'objects' => []]);
+    }
+    $like = '%' . $q . '%';
+    $st = db()->prepare('SELECT id, username FROM users WHERE username LIKE ? ORDER BY username LIMIT 10');
+    $st->execute([$like]);
+    $users = $st->fetchAll();
+    $st = db()->prepare('SELECT b.id, b.name, u.username FROM buckets b JOIN users u ON u.id = b.user_id WHERE b.name LIKE ? ORDER BY u.username, b.name LIMIT 10');
+    $st->execute([$like]);
+    $buckets = $st->fetchAll();
+    $st = db()->prepare('SELECT o.bucket_id AS bucket_id, b.name AS bucket, u.username, o.key, o.size FROM objects o
+        JOIN buckets b ON b.id = o.bucket_id JOIN users u ON u.id = b.user_id
+        WHERE o.key LIKE ? ORDER BY o.size DESC LIMIT 15');
+    $st->execute([$like]);
+    admin_ok(['users' => $users, 'buckets' => $buckets, 'objects' => $st->fetchAll()]);
+}
+
+function admin_backup_export(): void
+{
+    admin_require_login();
+    $users = db()->query('SELECT username, access_key, secret_key, quota_bytes, created_at, disabled FROM users ORDER BY username')->fetchAll();
+    $buckets = db()->query('SELECT u.username, b.name, b.created_at FROM buckets b JOIN users u ON u.id = b.user_id ORDER BY u.username, b.name')->fetchAll();
+    $settings = db()->query('SELECT app_name, trash_days, log_s3, log_admin FROM admin WHERE id = 1')->fetch();
+    $payload = [
+        'app' => 'minis3-backup',
+        'version' => 1,
+        'exported_at' => gmdate('Y-m-d H:i:s'),
+        'users' => $users,
+        'buckets' => $buckets,
+        'settings' => $settings,
+    ];
+    $name = 'minis3-backup-' . gmdate('Ymd-His') . '.json';
+    header('Content-Type: application/json; charset=utf-8');
+    header('Content-Disposition: attachment; filename="' . $name . '"');
+    header('Cache-Control: no-store');
+    echo json_encode($payload, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES);
+    exit;
+}
+
+function admin_backup_import(): void
+{
+    admin_require_login();
+    admin_require_csrf();
+    $raw = file_get_contents('php://input');
+    $data = json_decode($raw ?: 'null', true);
+    if (!is_array($data) || ($data['app'] ?? '') !== 'minis3-backup' || !is_array($data['users'] ?? null)) {
+        admin_err('Invalid backup file.');
+    }
+    $usersCreated = 0;
+    $bucketsCreated = 0;
+    $skipped = 0;
+    foreach ($data['users'] as $u) {
+        if (!is_array($u)) {
+            $skipped++;
+            continue;
+        }
+        $username = trim((string)($u['username'] ?? ''));
+        $accessKey = trim((string)($u['access_key'] ?? ''));
+        $secretKey = (string)($u['secret_key'] ?? '');
+        if (!admin_username_valid($username) || strlen($accessKey) < 4 || strlen($secretKey) < 6) {
+            $skipped++;
+            continue;
+        }
+        if (db_find_user_by_username($username) !== null) {
+            $skipped++;
+            continue;
+        }
+        $quotaBytes = max(0, (int)($u['quota_bytes'] ?? 0));
+        $st = db()->prepare('INSERT INTO users (username, access_key, secret_key, quota_bytes, disabled, created_at) VALUES (?,?,?,?,?,?)');
+        try {
+            $st->execute([$username, $accessKey, $secretKey, $quotaBytes, !empty($u['disabled']) ? 1 : 0, gmdate('Y-m-d H:i:s')]);
+        } catch (PDOException $e) {
+            $skipped++;
+            continue;
+        }
+        s3_ensure_dir(s3_user_dir($username));
+        $usersCreated++;
+    }
+    foreach ((array)($data['buckets'] ?? []) as $b) {
+        if (!is_array($b)) {
+            $skipped++;
+            continue;
+        }
+        $user = db_find_user_by_username(trim((string)($b['username'] ?? '')));
+        $name = trim((string)($b['name'] ?? ''));
+        if ($user === null || !s3_bucket_name_valid($name) || db_find_bucket_by_name((int)$user['id'], $name) !== null) {
+            $skipped++;
+            continue;
+        }
+        s3_ensure_dir(s3_bucket_dir($user['username'], $name));
+        $st = db()->prepare('INSERT INTO buckets (user_id, name, created_at) VALUES (?,?,?)');
+        try {
+            $st->execute([(int)$user['id'], $name, gmdate('Y-m-d H:i:s')]);
+        } catch (PDOException $e) {
+            $skipped++;
+            continue;
+        }
+        $bucketsCreated++;
+    }
+    admin_ok(['users_created' => $usersCreated, 'buckets_created' => $bucketsCreated, 'skipped' => $skipped]);
+}
+
+function admin_revoke_sessions(): void
+{
+    admin_require_login();
+    admin_require_csrf();
+    db()->exec('UPDATE admin SET session_ver = session_ver + 1 WHERE id = 1');
+    $_SESSION['sess_ver'] = (int)db()->query('SELECT session_ver FROM admin WHERE id = 1')->fetchColumn();
+    admin_ok();
+}
+
 function admin_stats(): void
 {
     $count = function (string $sql): int {
@@ -1550,12 +1754,43 @@ function admin_stats(): void
         'avgMs' => round((float)db()->query('SELECT COALESCE(AVG(ms), 0) FROM logs')->fetchColumn(), 1),
     ];
 
+    // Chart window: 24h (hourly buckets), 7d / 30d (daily buckets), plus the
+    // previous equal-length window so the UI can show deltas.
+    $range = (string)($_GET['range'] ?? '24h');
+    if ($range === '7d') {
+        $win = '-7 days';
+        $prevWin = '-14 days';
+        $fmt = '%Y-%m-%d';
+    } elseif ($range === '30d') {
+        $win = '-30 days';
+        $prevWin = '-60 days';
+        $fmt = '%Y-%m-%d';
+    } else {
+        $range = '24h';
+        $win = '-24 hours';
+        $prevWin = '-48 hours';
+        $fmt = '%Y-%m-%d %H:00:00';
+    }
+    $stats['range'] = $range;
+
     $h24 = [];
-    $st = db()->query("SELECT strftime('%Y-%m-%d %H:00:00', ts) AS h, COUNT(*) AS c FROM logs WHERE ts >= datetime('now', '-24 hours') GROUP BY h ORDER BY h");
+    $st = db()->query("SELECT strftime('$fmt', ts) AS h, COUNT(*) AS c FROM logs WHERE ts >= datetime('now', '$win') GROUP BY h ORDER BY h");
     while ($r = $st->fetch()) {
         $h24[] = [$r['h'], (int)$r['c']];
     }
     $stats['h24'] = $h24;
+
+    $winCount = function (string $extra) use ($win): int {
+        return (int)db()->query("SELECT COUNT(*) FROM logs WHERE ts >= datetime('now', '$win')" . $extra)->fetchColumn();
+    };
+    $prevCount = function (string $extra) use ($win, $prevWin): int {
+        return (int)db()->query("SELECT COUNT(*) FROM logs WHERE ts >= datetime('now', '$prevWin') AND ts < datetime('now', '$win')" . $extra)->fetchColumn();
+    };
+    $errSql = ' AND status >= 400';
+    $stats['winRequests'] = $winCount('');
+    $stats['winErrors'] = $winCount($errSql);
+    $stats['prevRequests'] = $prevCount('');
+    $stats['prevErrors'] = $prevCount($errSql);
 
     $top = [];
     $st = db()->query('SELECT u.username, COUNT(*) AS c FROM logs l JOIN users u ON u.id = l.user_id GROUP BY l.user_id ORDER BY c DESC LIMIT 5');

@@ -53,42 +53,50 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<meta name="theme-color" media="(prefers-color-scheme: light)" content="#F9F9FF">
-<meta name="theme-color" media="(prefers-color-scheme: dark)" content="#111318">
+<meta name="theme-color" media="(prefers-color-scheme: light)" content="#eef1f6">
+<meta name="theme-color" media="(prefers-color-scheme: dark)" content="#0a1120">
 <title><?= htmlspecialchars(app_name()) ?> - Install</title>
 <link rel="icon" href="/favicon.ico">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<script>
+/* Set the theme before first paint so the page never flashes the wrong
+   canvas. Resolution order mirrors the toggle logic below; keep in sync. */
+(function(){try{var s=localStorage.getItem('minis3_theme');if(s!=='light'&&s!=='dark'){s=(window.matchMedia&&window.matchMedia('(prefers-color-scheme: dark)').matches)?'dark':'light';}document.documentElement.setAttribute('data-theme',s);}catch(e){}})();
+</script>
 <style>
 :root{
-    color-scheme:light;
-    --primary:#0B57D0; --on-primary:#FFFFFF;
-    --primary-container:#D3E3FD; --on-primary-container:#041E49;
-    --secondary-container:#DAE2F9; --on-secondary-container:#131B2C;
-    --surface:#F9F9FF; --surface-1:#FFFFFF; --surface-2:#EEF0F8;
-    --on-surface:#191C22; --on-surface-var:#44474E;
-    --outline:#74777F; --outline-var:#C4C6D0;
-    --error:#BA1A1A; --error-container:#FFDAD6; --on-error-container:#410002;
-    --ok:#146C2E; --ok-container:#C6F0D2; --on-ok-container:#072711;
-    --shadow-1:0 1px 2px rgba(9,17,30,.10),0 1px 3px 1px rgba(9,17,30,.06);
-    --shadow-2:0 1px 2px rgba(9,17,30,.12),0 2px 6px 2px rgba(9,17,30,.08);
+    color-scheme:dark;
+    --primary:#d38a4d; --on-primary:#2a1305;
+    --primary-container:#3d2c1a; --on-primary-container:#f0c48d;
+    --secondary-container:#173b37; --on-secondary-container:#b6f0ea;
+    --surface:#0a1120; --surface-1:#101a2c; --surface-2:#0c1626;
+    --on-surface:#eaf0f8; --on-surface-var:#8b98b0;
+    --outline:#33445f; --outline-var:#1e2c44;
+    --error:#ef5f5f; --error-container:#3d1d1d; --on-error-container:#ffb3b3;
+    --ok:#3ed399; --ok-container:#14382a; --on-ok-container:#a8f2d6;
+    --shadow-1:0 1px 2px rgba(0,0,0,.4),0 1px 3px 1px rgba(0,0,0,.3);
+    --shadow-2:0 8px 28px rgba(0,0,0,.45),0 2px 6px 2px rgba(0,0,0,.35);
     --ease-standard:cubic-bezier(.2,0,.2,1);
 }
-[data-theme="dark"]{
-    color-scheme:dark;
-    --primary:#A8C7FA; --on-primary:#062E6F;
-    --primary-container:#0842A0; --on-primary-container:#D3E3FD;
-    --secondary-container:#3F4759; --on-secondary-container:#DAE2F9;
-    --surface:#111318; --surface-1:#1B1E24; --surface-2:#20242B;
-    --on-surface:#E3E2E9; --on-surface-var:#C4C6D0;
-    --outline:#8E9099; --outline-var:#44474E;
-    --error:#FFB4AB; --error-container:#93000A; --on-error-container:#FFDAD6;
-    --ok:#6DD58C; --ok-container:#0F5223; --on-ok-container:#C6F0D2;
-    --shadow-1:0 1px 2px rgba(0,0,0,.5),0 1px 3px 1px rgba(0,0,0,.35);
-    --shadow-2:0 1px 2px rgba(0,0,0,.55),0 2px 6px 2px rgba(0,0,0,.4);
+[data-theme="light"]{
+    color-scheme:light;
+    --primary:#b26a2a; --on-primary:#ffffff;
+    --primary-container:#f3ddc2; --on-primary-container:#4a2c10;
+    --secondary-container:#cdebe8; --on-secondary-container:#0b3f3a;
+    --surface:#eef1f6; --surface-1:#ffffff; --surface-2:#f4f6fa;
+    --on-surface:#121a29; --on-surface-var:#55627a;
+    --outline:#b9c2d2; --outline-var:#d7dee9;
+    --error:#b3261e; --error-container:#f9dedc; --on-error-container:#410002;
+    --ok:#10714c; --ok-container:#c9efda; --on-ok-container:#072711;
+    --shadow-1:0 1px 2px rgba(16,30,55,.10),0 1px 3px 1px rgba(16,30,55,.06);
+    --shadow-2:0 8px 28px -10px rgba(16,30,55,.18),0 2px 6px 2px rgba(16,30,55,.08);
 }
 *{box-sizing:border-box}
 body{
     margin:0;min-height:100vh;display:flex;align-items:center;justify-content:center;padding:20px;
-    font-family:"Roboto Flex","Roboto",system-ui,-apple-system,"Segoe UI",Arial,sans-serif;
+    font-family:'Space Grotesk',system-ui,-apple-system,'Segoe UI',Roboto,Arial,sans-serif;
     background:var(--surface);color:var(--on-surface);font-size:14px;line-height:1.5;
     transition:background-color .25s var(--ease-standard),color .25s var(--ease-standard);
 }
@@ -137,6 +145,19 @@ li{margin:6px 0}
 a{color:var(--primary);font-weight:500}
 code{background:var(--surface-2);border-radius:6px;padding:2px 7px;font-size:12px;font-family:ui-monospace,Consolas,monospace}
 :focus-visible{outline:2px solid var(--primary);outline-offset:2px}
+
+/* field-instrument pass */
+body{font-family:'Space Grotesk',system-ui,-apple-system,'Segoe UI',Roboto,Arial,sans-serif;background-image:linear-gradient(rgba(96,150,214,.07) 1px,transparent 1px),linear-gradient(90deg,rgba(96,150,214,.07) 1px,transparent 1px);background-size:28px 28px;background-attachment:fixed}
+[data-theme="light"] body{background-image:linear-gradient(rgba(51,90,148,.06) 1px,transparent 1px),linear-gradient(90deg,rgba(51,90,148,.06) 1px,transparent 1px)}
+h1{letter-spacing:-.01em}
+.card{border:1px solid var(--outline-var);border-radius:16px}
+.login-logo{background:linear-gradient(155deg,#d38a4d,#a85f28) !important;color:#2a1305 !important;box-shadow:none !important;border-radius:12px !important}
+.btn{border-radius:6px}
+.tf>input{font-family:'IBM Plex Mono',ui-monospace,'SFMono-Regular',Menlo,Consolas,'Courier New',monospace}
+.tf>input:focus{box-shadow:0 0 0 3px rgba(211,138,77,.18)}
+code{font-family:'IBM Plex Mono',ui-monospace,'SFMono-Regular',Menlo,Consolas,'Courier New',monospace}
+::selection{background:rgba(211,138,77,.25)}
+
 </style>
 </head>
 <body>
@@ -190,7 +211,9 @@ code{background:var(--surface-2);border-radius:6px;padding:2px 7px;font-size:12p
 </div>
 <script>
 try {
-    if (localStorage.getItem('minis3_theme') === 'dark') document.documentElement.dataset.theme = 'dark';
+    var s = localStorage.getItem('minis3_theme');
+    if (s !== 'light' && s !== 'dark') s = (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) ? 'dark' : 'light';
+    if (s) document.documentElement.dataset.theme = s;
 } catch (e) {}
 </script>
 </body>

@@ -122,10 +122,12 @@ chmod 770 /var/www/minis3/data               # objects + SQLite DB are written h
 1. `systemctl start nginx php8.5-fpm` (if not already running) and
    `systemctl enable nginx php8.5-fpm`.
 2. Open `http://YOUR-IP-OR-DOMAIN/install.php` (or the https URL from step 6),
-   set the admin password. The sample nginx config has a `location = /install.php`
+   set the admin username and password. The sample nginx config has a `location = /install.php`
    block that runs the installer; once you delete the file it returns 404.
 3. **Delete `install.php` from the server.**
-4. Open `/admin/`, sign in, **Users** -> **+ Add user**, note the keys.
+4. Open `/admin/`, sign in, **Users** -> **+ Add user**, note the keys
+   (per-key copy buttons; **Settings -> Connect** prints ready-to-paste
+   `rclone` / `aws cli` configs per user).
 
 ## 6. TLS (recommended)
 
@@ -200,6 +202,10 @@ first:
 php8.5 -r '$db = new PDO("sqlite:/var/www/minis3/data/app.sqlite"); $db->exec("PRAGMA wal_checkpoint(TRUNCATE);");'
 ```
 
+For users/buckets/settings metadata only (no object data), the admin
+panel's **Settings -> Backup** exports a JSON file that can be re-imported
+on another install.
+
 ## 10. Troubleshooting
 
 | Symptom | Fix |
@@ -208,12 +214,12 @@ php8.5 -r '$db = new PDO("sqlite:/var/www/minis3/data/app.sqlite"); $db->exec("P
 | `502 Bad Gateway` | FPM socket path is wrong or php-fpm not running; check `ls /run/php/`, `systemctl status php8.5-fpm` |
 | `404` for `/admin/` | The `location = /admin` / `location /admin/` blocks are missing; re-copy nginx.conf |
 | `403` on `/admin/api.php` | `data/`/`lib/` deny block is too broad - the `~ ^/(data\|lib\|tests)` regex must not match `admin`; it doesn't by default |
-| `SignatureDoesNotMatch` | Keys differ from the server's; re-copy from the admin panel. Server clock wrong - run `timedatectl set-ntp true` (skew limit 15 min, `MAX_SKEW` in config.php) |
+| `SignatureDoesNotMatch` | Keys differ from the server's; re-copy from the admin panel (Users -> Keys, per-key copy buttons). Server clock wrong - run `timedatectl set-ntp true` (skew limit 15 min, `MAX_SKEW` in config.php) |
 | Big upload fails with `413` | `client_max_body_size` too small for the object |
 | Slow uploads / timeouts | `fastcgi_read_timeout` and `client_body_timeout`; also check disk space for nginx temp buffer |
 | `install.php` shows an S3 XML `AccessDenied` error | The installer is being routed to `index.php` (S3 API) - the `location = /install.php` block is missing; re-copy nginx.conf |
 | Can't reach the installer | It was deleted (good); or on an existing install the `install.php` page says "Already installed" |
-| Bucket named `admin` (or `data`, `lib`, `tests`, `tools`, `index.php`, `install.php`, `reset.php`) unreachable | Those names are reserved by the app's routing / file serving - rename the bucket |
+| Bucket named `admin` (or `data`, `lib`, `tests`, `tools`, `config.php`, `index.php`, `install.php`, `reset.php`) unreachable | Those names are reserved by the app's routing / file serving - rename the bucket |
 | `AccessDenied: x-amz-date` | Client doesn't send `x-amz-date`; use a real S3 client (WinSCP S3, rclone, aws cli) |
 | Downloads show no file size / video preview won't play | nginx `gzip` or PHP `zlib.output_compression` is enabled - turn them off (section 8) |
 | Forgot the admin username / password | With shell access: `php tools/reset-admin.php` from the app root (clears two-factor authentication too). Without shell access: create an empty file `data/reset.enabled` (FTP / File Manager), open `/reset.php`, set a new username/password - the marker auto-deletes on success |
@@ -229,7 +235,11 @@ php8.5 -r '$db = new PDO("sqlite:/var/www/minis3/data/app.sqlite"); $db->exec("P
       `curl -I http://s3.example.com/data/app.sqlite` -> 403
 - [ ] `nginx.conf`'s `location /` sends everything to `index.php`, so object
       keys can never be served as static files - don't add `try_files` there
-- [ ] Strong admin password; secret keys regenerated in the admin panel if
-      they leak
+- [ ] Strong unique admin password (set at install; no default exists);
+      enable admin 2FA and/or a passkey if the panel is exposed
+- [ ] After any incident: rotate the password, use **Settings -> Sessions ->
+      Revoke others**, and regenerate (or **Disable**) affected S3 users -
+      disabling blocks keys instantly while keeping data
+- [ ] Secret keys regenerated in the admin panel if they leak
 - [ ] Logs tab: disable S3/admin logging in **Settings** if the log table
       grows too fast

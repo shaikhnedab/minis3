@@ -82,15 +82,15 @@ $totpOn = is_array($adminRow) && (string)$adminRow['totp_secret'] !== '';
 <meta name="robots" content="noindex, nofollow">
 <title><?= htmlspecialchars(app_name()) ?> - Admin reset</title>
 <style>
-:root{color-scheme:light;--surface:#F9F9FF;--surface-1:#FFFFFF;--on-surface:#191C22;--on-surface-var:#44474E;
-    --primary:#0B57D0;--on-primary:#FFFFFF;--outline:#74777F;--error:#BA1A1A;--error-container:#FFDAD6;--on-error-container:#410002;
-    --ok:#146C2E;--ok-container:#C6F0D2;--on-ok-container:#072711;--warn:#8F5000;--warn-container:#FFDCBE;--on-warn-container:#2E1500}
-[data-theme="dark"]{color-scheme:dark;--surface:#111318;--surface-1:#1B1E24;--on-surface:#E3E2E9;--on-surface-var:#C4C6D0;
-    --primary:#A8C7FA;--on-primary:#062E6F;--outline:#8E9099;--error:#FFB4AB;--error-container:#93000A;--on-error-container:#FFDAD6;
-    --ok:#6DD58C;--ok-container:#0F5223;--on-ok-container:#C6F0D2;--warn:#FFB868;--warn-container:#6B3D00;--on-warn-container:#FFDCBE}
+:root{color-scheme:dark;--surface:#0a1120;--surface-1:#101a2c;--on-surface:#eaf0f8;--on-surface-var:#8b98b0;
+    --primary:#d38a4d;--on-primary:#2a1305;--outline:#33445f;--error:#ef5f5f;--error-container:#3d1d1d;--on-error-container:#ffb3b3;
+    --ok:#3ed399;--ok-container:#14382a;--on-ok-container:#a8f2d6;--warn:#eab35a;--warn-container:#3d2c12;--on-warn-container:#ffd9a0}
+[data-theme="light"]{color-scheme:light;--surface:#eef1f6;--surface-1:#ffffff;--on-surface:#121a29;--on-surface-var:#55627a;
+    --primary:#b26a2a;--on-primary:#ffffff;--outline:#b9c2d2;--error:#b3261e;--error-container:#f9dedc;--on-error-container:#410002;
+    --ok:#10714c;--ok-container:#c9efda;--on-ok-container:#072711;--warn:#8a5b06;--warn-container:#f7e3c2;--on-warn-container:#2e1500}
 *{box-sizing:border-box}
 body{margin:0;min-height:100vh;display:flex;align-items:center;justify-content:center;padding:20px;
-    font-family:system-ui,-apple-system,"Segoe UI",Arial,sans-serif;background:var(--surface);color:var(--on-surface);font-size:14px;line-height:1.5}
+    font-family:'Space Grotesk',system-ui,-apple-system,'Segoe UI',Roboto,Arial,sans-serif;background:var(--surface);color:var(--on-surface);font-size:14px;line-height:1.5}
 .card{background:var(--surface-1);border-radius:20px;padding:28px;max-width:420px;width:100%;box-shadow:0 1px 3px rgba(0,0,0,.15)}
 h1{font-size:20px;font-weight:600;margin:0 0 4px}
 .sub{color:var(--on-surface-var);margin:0 0 16px;font-size:13px}
@@ -110,6 +110,18 @@ label.check input{width:17px;height:17px;accent-color:var(--primary)}
 .box.ok{background:var(--ok-container);color:var(--on-ok-container)}
 .box.warn{background:var(--warn-container);color:var(--on-warn-container)}
 code{background:rgba(127,127,127,.15);border-radius:6px;padding:2px 7px;font-size:12px}
+
+/* field-instrument pass */
+body{font-family:'Space Grotesk',system-ui,-apple-system,'Segoe UI',Roboto,Arial,sans-serif;background-image:linear-gradient(rgba(96,150,214,.07) 1px,transparent 1px),linear-gradient(90deg,rgba(96,150,214,.07) 1px,transparent 1px);background-size:28px 28px;background-attachment:fixed}
+[data-theme="light"] body{background-image:linear-gradient(rgba(51,90,148,.06) 1px,transparent 1px),linear-gradient(90deg,rgba(51,90,148,.06) 1px,transparent 1px)}
+h1{letter-spacing:-.01em}
+.card{border:1px solid var(--outline);border-radius:16px}
+.btn{border-radius:6px}
+.tf input{font-family:'IBM Plex Mono',ui-monospace,'SFMono-Regular',Menlo,Consolas,'Courier New',monospace}
+.tf input:focus{box-shadow:0 0 0 3px rgba(211,138,77,.18)}
+code{font-family:'IBM Plex Mono',ui-monospace,'SFMono-Regular',Menlo,Consolas,'Courier New',monospace}
+::selection{background:rgba(211,138,77,.25)}
+
 </style>
 </head>
 <body>
@@ -160,7 +172,7 @@ code{background:rgba(127,127,127,.15);border-radius:6px;padding:2px 7px;font-siz
   <?php endif; ?>
 </div>
 <script>
-try { if (localStorage.getItem('minis3_theme') === 'dark') document.documentElement.dataset.theme = 'dark'; } catch (e) {}
+try { var s = localStorage.getItem('minis3_theme'); if (s !== 'light' && s !== 'dark') s = (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) ? 'dark' : 'light'; if (s) document.documentElement.dataset.theme = s; } catch (e) {}
 </script>
 </body>
 </html>

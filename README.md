@@ -1,9 +1,9 @@
 # MiniS3
 
-A small S3-compatible object storage server written in PHP, designed to run on a
-normal shared web host (Apache) or a VPS (nginx). It speaks the AWS S3 REST API
-(AWS Signature V4) so it works with `rclone`, `aws cli`, `s3cmd`, `mc` and any
-other S3 client, and it ships with a web admin panel.
+A small S3-compatible object storage server in PHP. Runs on plain shared
+hosting (Apache) or a VPS (nginx), speaks AWS Signature V4 so `rclone`,
+`aws cli`, `s3cmd` and `mc` work out of the box, and ships with a
+dark, mobile-friendly admin panel.
 
 ```
 minis3/
@@ -15,116 +15,107 @@ minis3/
 ├── nginx.conf       sample nginx server block
 ├── router.php       only used by `php -S` for local development
 ├── admin/
-│   ├── index.php    admin panel (users, buckets, files, logs, settings)
-│   └── api.php      admin JSON API
+│   ├── index.php    admin panel (dashboard, users, buckets, files, logs, trash, settings)
+│   └── api.php      admin JSON API (session + CSRF protected)
 ├── lib/             util, db, log, auth (SigV4), s3 handlers, webauthn (passkeys)
 ├── data/            object storage + SQLite database (web access denied)
 ├── tools/
 │   └── reset-admin.php  CLI password reset for the admin account (web-denied)
-└── tests/smoke.php  end-to-end API test
+└── tests/smoke.php  end-to-end API test (46 checks, also runnable against existing keys)
 ```
+
+Contents: [Features](#features) · [Requirements](#requirements) ·
+[Installation](#installation) · [Client configuration](#client-configuration) ·
+[Admin panel](#admin-panel) · [Admin API](#admin-api) ·
+[Backup & restore](#backup--restore) · [Troubleshooting](#troubleshooting) ·
+[Notes and limitations](#notes-and-limitations) ·
+[Security checklist](#security-checklist) · [Releases](#releases)
 
 ## Features
 
-- S3 API: ListBuckets, Create/Delete/HeadBucket, ListObjectsV1/V2 (prefix,
-  delimiter, pagination), PutObject, GetObject (Range, If-None-Match,
-  If-Modified-Since), HeadObject, DeleteObject, DeleteObjects, CopyObject,
-  multipart uploads (initiate/part/complete/abort/list), bucket ACL/versioning/
-  location stubs.
-- AWS Signature V4 authentication (path-style requests), including
-  query-string **presigned URLs for GET, HEAD, PUT and DELETE** (generate
-  time-limited share links from the admin panel; external clients can presign
-  uploads too - tested with the Pelican Panel + Wings backup upload flow).
-- Optional **per-user storage quotas** (set in MB per user; enforced on S3
-  PUTs, multipart completion and admin uploads with `QuotaExceeded` errors).
-- Admin panel trash: files deleted in the UI are kept for a configurable
-  number of days (Settings) and can be restored or purged from the Trash tab.
-- Download any folder (or a whole bucket) as a ZIP archive - streamed, no
-  temp files, no PHP extensions required.
-- Admin **two-factor authentication** (TOTP / authenticator apps) and login
-  rate limiting (6 failed attempts per IP per 15 minutes).
-- Admin **passkeys** (WebAuthn): passwordless sign-in with Face ID, Windows
-  Hello, a security key or a password manager - pure PHP, no extra
-  dependencies (ES256 / RS256 / Ed25519 authenticators supported). Passkeys
-  are additional to the password + 2FA login, not a replacement.
-- **Branding**: rename the app (title, header, install page, 2FA issuer) and
-  upload a custom favicon (PNG/GIF/JPG/SVG/ICO/WebP) from Settings - served
-  at `/favicon.ico`.
-- Object details (size, type, ETag, `x-amz-meta-*`), file browser list/grid
-  views with image thumbnails, drag & drop + clipboard upload, keyboard
-  shortcuts (`/` search, `u` upload), sortable user/bucket tables, per-user
-  14-day usage sparklines, and a multipart-upload manager (abort single
-  uploads or clean up everything older than 7 days).
-- Storage layout: one folder per bucket inside one folder per user:
-  `data/users/{username}/{bucket}/{key...}`.
-- Admin panel: manage S3 users (access key / secret key, regenerate keys,
-  quotas), create/rename/delete buckets, browse/upload/download/delete files
-  with a folder view (pagination, search, multi-select bulk delete / move /
-  copy / rename), view images/videos/audio inline in the browser, view and
-  edit readable text and config files (512 KB limit), and inspect request
-  logs with filters and search. Uploads stream straight to disk with a
-  byte-accurate progress bar and percentage.
-- Empty-object "folder markers" (keys ending in `/`, as created by WinSCP /
-  FolderSync for empty folders) are supported: they list as folders, stay
-  empty when files are deleted, and follow move/copy/rename/delete.
+**S3 API**
+
+- Buckets: List/Create/Delete/Head, ListObjects V1 + V2 (prefix, delimiter,
+  pagination), per-user namespaces (two users may own same-named buckets).
+- Objects: Put/Get (Range, If-None-Match, If-Modified-Since)/Head/Delete,
+  multi-object Delete, Copy, multipart uploads
+  (initiate / part / complete / abort / list).
+- Auth: header Signature V4 plus query-string **presigned URLs for GET, HEAD,
+  PUT and DELETE** (generate time-limited share links from the panel, or
+  presign uploads from external tools).
+- **Per-user storage quotas** (MB per user, enforced on PUTs, multipart
+  completion and panel uploads with `QuotaExceeded`).
+- **Disable users** without deleting anything: keys stop working immediately
+  (header auth and presigned URLs), buckets and files are kept.
+- Empty-object folder markers (`keys ending in /`, as created by WinSCP /
+  FolderSync) list as folders and follow move/copy/rename/delete.
+- Storage layout: `data/users/{username}/{bucket}/{key...}`.
+
+**Admin panel**
+
+Dark field-instrument theme (navy canvas, copper accents, mono readouts),
+Space Grotesk + IBM Plex Mono via Google Fonts with system fallbacks,
+light/dark toggle that follows the OS, navigation rail on desktop, bottom bar
+on phones, `Ctrl+K` command palette (jump anywhere, search users / buckets /
+objects), keyboard shortcuts (`/` focuses key search, `u` uploads).
+
+| Tab       | What you can do |
+|-----------|-----------------|
+| Dashboard | Usage stats, 24h / 7d / 30d request chart with previous-period deltas, status distribution with error delta, clickable stat cards, top users (click to filter), recent activity with one-click "view in logs" |
+| Users     | Add / edit / delete, search, per-user storage bars + quotas, 14-day request sparklines, last-active column, disable / enable toggle, per-key copy buttons, masked secret with reveal, secret regeneration |
+| Buckets   | Add / rename / type-to-confirm delete, per-bucket object count + size; file browser with list/grid views, image thumbnails, search, sort, multi-select bulk copy/move/delete, new folder/file, upload (button, drag & drop, paste) with progress, inline image/video/audio/PDF preview, text editor (512 KB), object details (ETag, type, meta), presigned share links with expiry picker, folder/bucket ZIP download |
+| Logs      | Every request with user/kind/method/status filters + search, slow-request highlighting, live-tail mode, one-click CSV export of the filtered view, slow-request highlighting, clear |
+| Trash     | Soft-deleted files with retention badges, restore preview (original path, size, purge date), restore / purge / empty; retention days in Settings |
+| Settings  | Connect card (endpoint, region, copy-paste AWS CLI + rclone snippets per user), backup export/import (JSON), session revocation, branding (app name + favicon), logging toggles, admin account, password, trash retention, TOTP 2FA, passkeys, multipart-upload manager |
 
 ## Requirements
 
-- PHP 7.4+ with `pdo_sqlite` and `simplexml` (both are bundled in standard
-  builds).
-- Apache with mod_rewrite (shared hosting default) or nginx.
+- PHP 7.4+ with `pdo_sqlite` and `simplexml` (bundled in standard builds).
+- Apache with mod_rewrite (shared-hosting default) or nginx.
 - SQLite 3.24+ (for upserts; any distro PHP in the last few years has this).
+- A browser with JavaScript for the admin panel. Clipboard copy needs a
+  secure context (HTTPS or `localhost`); everywhere else the panel falls back
+  to manual copy. Passkeys additionally need HTTPS or `localhost` (Chrome
+  rejects bare-IP origins), so the passkey button only appears where allowed.
 
 ## Installation
 
-1. Upload the whole `minis3/` folder to your web root (e.g. `public_html/`
-   or `www/`). Point a subdomain or subfolder at it, e.g.
-   `https://s3.example.com/`.
-2. Open `https://s3.example.com/install.php` in a browser, set the admin
-   username and password, then **delete `install.php` from the server**.
-3. Open `/admin/`, sign in, go to the **Users** tab and add an S3 user. Note
-   the access key and secret key.
-4. Point your S3 client at the server (examples below).
+1. Upload the whole `minis3/` folder to your web root and point a subdomain
+   or subfolder at it, e.g. `https://s3.example.com/`.
+2. Open `https://s3.example.com/install.php`, set the admin username and
+   password, then **delete `install.php` from the server**.
+3. Open `/admin/`, sign in, add an S3 user on the **Users** tab. Copy the
+   access key and secret key (or use the **Settings → Connect** card, which
+   prints ready-to-paste `aws` / `rclone` configs).
 
-The web root must be writable by PHP (the `data/` directory, 0775 or 0770) so
-that files and the SQLite database can be created.
+PHP needs write access to `data/` (0775 or 0770) for files and the database.
 
-On DirectAdmin shared hosting, see `DIRECTADMIN.md` for a step-by-step guide.
-On a nginx VPS with PHP 8.5 FPM, see `NGINX.md`.
-
-### nginx
-
-Use the sample `nginx.conf`. Important: the `location /` block sends *every*
-request to `index.php` - S3 object keys must never be served as static files.
-
-### Apache
-
-The `.htaccess` handles routing and blocks direct access to `data/`, `lib/`
-and `config.php`. `.htaccess` must be enabled (`AllowOverride All`).
+- DirectAdmin shared hosting: step-by-step in `DIRECTADMIN.md`.
+- nginx VPS with PHP-FPM: `NGINX.md` (sample block in `nginx.conf` — every
+  request must reach `index.php`; object keys are never served as static
+  files; the `.htaccess` does the equivalent on Apache and also blocks
+  `data/`, `lib/` and `config.php`).
 
 ### Local development
 
 ```bash
 php -S 127.0.0.1:8000 router.php
-php tests/smoke.php
+php tests/smoke.php                      # fresh install + user + full suite (48 checks)
+S3_ACCESS_KEY=... S3_SECRET_KEY=... php tests/smoke.php   # against existing keys (46 checks)
 ```
 
-The smoke test installs the server, creates a test user and runs ~40 API
-checks against the running server (including presigned URLs, tampered
-signatures, quota enforcement and Content-MD5).
-
-On Windows you can either run the same commands inside WSL, or run the
-Windows nginx + php-cgi stack with `start-dev.ps1` (serves
-http://127.0.0.1:8765, stop with `stop-dev.ps1`). The scripts auto-detect
-the project folder - including WSL locations like
-`\\wsl.localhost\<distro>\home\<user>\minis3`, which are mapped to a drive
-letter automatically.
+On Windows run the same inside WSL, or use the Windows nginx + php-cgi
+stack: `start-dev.ps1` serves http://127.0.0.1:8765 (`stop-dev.ps1` stops
+it). The scripts auto-detect the project folder, including WSL paths like
+`\\wsl.localhost\<distro>\home\<user>\minis3`.
 
 ## Client configuration
 
-### rclone
+The panel's **Settings → Connect** card generates these per user, but the
+shapes are:
 
-```
+```ini
+# rclone
 [rclone_s3]
 type = s3
 provider = Other
@@ -136,23 +127,15 @@ force_path_style = true
 ```
 
 ```bash
-rclone ls rclone_s3:my-bucket
-rclone copy file.txt rclone_s3:my-bucket/
+# aws cli (use a named profile per user)
+aws configure set aws_access_key_id AKIA...     --profile minis3-user
+aws configure set aws_secret_access_key ...     --profile minis3-user
+aws configure set region us-east-1              --profile minis3-user
+aws --profile minis3-user --endpoint-url https://s3.example.com s3 ls
 ```
 
-### aws cli
-
-```bash
-aws configure set default.region us-east-1
-aws configure set default.s3.addressing_style path
-aws --endpoint-url https://s3.example.com s3 ls
-aws --endpoint-url https://s3.example.com s3 cp file.txt s3://my-bucket/
-aws --endpoint-url https://s3.example.com s3 cp file.txt s3://my-bucket/ sse-c  # not supported
-```
-
-### s3cmd
-
-```
+```ini
+# s3cmd
 [default]
 access_key = AKIA...
 secret_key = ...
@@ -161,91 +144,114 @@ host_bucket = s3.example.com
 use_https = True
 ```
 
-### mc (MinIO client)
-
 ```bash
+# mc (MinIO client)
 mc alias set mys3 https://s3.example.com AKIA... secret... --path on
-mc ls mys3/my-bucket
 ```
 
 ## Admin panel
 
-Material 3 single-page app, fully self-contained (no CDN), mobile friendly
-(navigation rail on desktop, bottom bar on phones), light/dark theme that
-follows your system preference.
+Sign in at `/admin/` with the installer credentials. Sessions are PHP
+sessions (30-day cookie) plus a CSRF token; **Sessions** in Settings signs
+out every other browser/device. Failed logins are rate-limited (6 per IP per
+15 minutes, then HTTP 429) and optionally gated by TOTP and/or passkeys.
 
-| Tab        | What you can do                                                                   |
-|------------|-----------------------------------------------------------------------------------|
-| Dashboard  | Usage stats, request status distribution, 24-hour chart, top users, recent activity |
-| Users      | Add / edit / delete S3 users, quotas, show or regenerate secret keys, usage sparklines |
-| Buckets    | Add / rename / delete buckets per user; browse files (list or grid view with image thumbnails), upload (button, drag & drop or paste), download, preview/edit text, share presigned links, download folders as ZIP, bulk move/copy/delete |
-| Logs       | Inspect every request with filters (user, kind, method, status) and search        |
-| Trash      | Restore or purge admin-deleted files (retention configurable in Settings)         |
-| Settings   | Branding (app name + favicon), logging toggles, trash retention, admin 2FA (TOTP), passkeys (WebAuthn), multipart-upload cleanup, password change |
+**Forgot the admin password?**
+- Shell: `php tools/reset-admin.php` from the app root (sets a new
+  username/password, clears 2FA if enabled).
+- No shell: create an empty `data/reset.enabled` via FTP / File Manager, open
+  `/reset.php`, set a new username/password (optionally clearing 2FA). The
+  marker is deleted automatically after a successful reset.
 
-The admin panel uses PHP sessions plus a CSRF token, rate-limits failed
-logins (6 per IP per 15 minutes) and supports TOTP two-factor
-authentication and passkey (WebAuthn) sign-in. The S3 API is protected by
-SigV4 signatures. Put the whole site behind HTTPS - passkeys additionally
-require a secure context (HTTPS or localhost), so the "Sign in with
-passkey" button only appears when the browser allows it.
+## Admin API
 
-**Forgot the admin password?** Two ways:
-- **Shell access**: run `php tools/reset-admin.php` from the app root - it sets a
-  new username/password (and clears two-factor authentication if enabled).
-- **No shell (e.g. shared hosting)**: create an empty file `data/reset.enabled`
-  via FTP / File Manager, open `/reset.php` in a browser and set a new
-  username/password. `data/` is web-denied, so only the site owner can enable
-  the page, and the marker is deleted automatically after a successful reset.
+Same-origin JSON API at `/admin/api.php?action=…`, session cookie plus
+`X-CSRF-Token` header on POSTs. Handy for scripting:
+
+| Action | Notes |
+|--------|-------|
+| `users`, `buckets`, `objects`, `trash`, `uploads`, `logs`, `stats` | List + manage; `logs` accepts `user_id/kind/method/status/q` filters; `stats` accepts `range=24h\|7d\|30d` and returns previous-period deltas |
+| `logs_export` | Download the filtered log view as CSV (cap 10k rows) |
+| `search_all?q=` | Capped user / bucket / object search backing `Ctrl+K` |
+| `backup_export` / `backup_import` | JSON with users (incl. keys), buckets and panel settings; import recreates missing entries and reports `{users_created, buckets_created, skipped}` |
+| `revoke_sessions` | Invalidate every admin session except the current one |
+| `update_settings`, `update_profile`, `change_password`, `update_logs` | Panel preferences, admin renames/password |
+| `totp_start`, `totp_enable`, `totp_disable` | TOTP 2FA lifecycle |
+| `passkey_start`, `passkey_register`, `passkeys`, `passkey_delete`, `passkey_challenge`, `passkey_login` | WebAuthn lifecycle (ES256 / RS256 / Ed25519) |
+| `upload_favicon`, `reset_favicon` | Custom favicon served at `/favicon.ico` |
+
+`POST`s without (or with a wrong) CSRF token are rejected with 403; logged-out
+calls get 401; revoked sessions get 401 with "Session revoked".
+
+## Backup & restore
+
+- **Panel**: Settings → Backup exports users/buckets/settings JSON and
+  re-imports it (existing names are skipped, never overwritten). Object *data*
+  is not included — re-upload files afterwards.
+- **Full backup**: copy the whole `data/` directory (SQLite DB + object
+  files). SQLite WAL mode is on, so copy it quiesced or also grab the
+  `-wal`/`-shm` sidecars.
+
+## Troubleshooting
+
+- **Login says "Invalid username or password" (403 with a message):** wrong
+  credentials (or the admin was renamed in Settings → Admin account). After 6
+  failures the IP is locked out for 15 minutes (HTTP 429).
+- **Login shows a bare "HTTP 403" with no message:** the POST never reached
+  `api.php` — something in front (host WAF, proxy rule, `.htaccess` override)
+  blocked it. Check the request in DevTools → Network and the server error log.
+- **Copy buttons say "Copy failed":** the browser blocked clipboard access.
+  Serve over HTTPS (or use `localhost`); on plain-HTTP LAN hosts use the
+  click-to-select fields and copy manually.
+- **No "Sign in with passkey" button:** expected on plain HTTP or bare-IP
+  origins — WebAuthn needs HTTPS or `localhost`.
+- **Video/audio previews download instead of playing:** webserver/PHP output
+  compression is on — turn it off (see notes below); it also strips
+  `Content-Length` from streamed downloads.
+- **Certain bucket names 404 (e.g. `admin`, `data`):** reserved — Apache/nginx
+  serve or deny the real app paths before the S3 router runs (full list in
+  notes).
 
 ## Notes and limitations
 
-- Signature V4 (header auth **and** query-string presigned URLs for GET,
-  HEAD, PUT and DELETE); no versioning; no bucket policies or object tagging
-  (those sub-resources return 501 or a stub response).
-- Bucket names must follow S3 rules (3-63 chars, lowercase letters, digits,
-  dots, hyphens). Buckets are namespaced per user, so two users may have
-  buckets with the same name.
-- Object keys containing `.` or `..` path segments are rejected (filesystem
-  safety). Keys ending with `/` are treated as empty-folder markers and are
-  supported; normal files use real keys like `folder/file.txt`.
-- Do not name buckets `admin`, `data`, `lib`, `tests`, `tools`, `index.php`,
-  `install.php` or `reset.php` - Apache/nginx serve the real app files (or
-  deny them) before the S3 router runs, so those bucket names are
-  unreachable. Object keys are always under a bucket and never collide.
-- Upload/download size limits come from your PHP (`upload_max_filesize`,
-  `post_max_size`, `max_execution_time`) and web server (`client_max_body_size`
-  on nginx) configuration. Admin uploads and the S3 `PUT` API stream the body
-  to disk, so `upload_max_filesize` / `post_max_size` do not apply to them;
-  only the web server's request-body limit and PHP's time limits matter.
-- Files larger than 2 GB are unreliable on 32-bit PHP builds.
-- `data/` holds the SQLite database. Back it up together with the files, or
-  exclude it if you only need the object files.
-- Keep webserver/PHP output compression off for this app: it strips
-  `Content-Length` from streamed downloads and corrupts video/audio previews.
-  The bundled `.htaccess` disables `mod_deflate`/`mod_brotli`/`mod_gzip` and
-  PHP `zlib.output_compression` (mod_php/LSAPI) automatically; on nginx leave
-  `gzip` off and set `zlib.output_compression = Off` in your PHP config.
-  Folder ZIP downloads are streamed and intentionally have no `Content-Length`.
+- Signature V4 (header auth **and** presigned URLs for GET, HEAD, PUT,
+  DELETE); no versioning; no bucket policies or object tagging (those
+  sub-resources return 501 or a stub).
+- Bucket names follow S3 rules (3–63 chars, lowercase, digits, dots,
+  hyphens) and are namespaced per user.
+- Object keys with `.` / `..` segments are rejected; keys ending in `/` are
+  empty-folder markers.
+- Reserved bucket names: `admin`, `data`, `lib`, `tests`, `tools`,
+  `config.php`, `index.php`, `install.php`, `reset.php`.
+- Size limits come from PHP (`max_execution_time`) and the web server
+  (`client_max_body_size` on nginx). S3 PUTs and admin uploads stream to
+  disk, so `upload_max_filesize` / `post_max_size` do not apply; only the
+  server body limit and PHP time limits matter. 2 GB+ files are unreliable on
+  32-bit PHP.
+- Keep webserver/PHP output compression **off**: `.htaccess` disables
+  `mod_deflate`/`mod_brotli`/`mod_gzip` and `zlib.output_compression`
+  automatically; on nginx leave `gzip` off and set
+  `zlib.output_compression = Off`. ZIP downloads are streamed with no
+  `Content-Length` by design.
+- Renaming a file onto an existing name replaces it (S3 copy semantics);
+  creating a file over an existing name is rejected (409). Bulk copy/move
+  without "overwrite" reports conflicts (409 + list) instead of partial writes.
 
 ## Security checklist
 
-- Use HTTPS (self-signed or Let's Encrypt) - SigV4 sends keys in every request.
+- HTTPS everywhere — SigV4 sends keys with every request.
 - Delete `install.php` after installation.
-- Enable admin two-factor authentication (Settings) if the panel is exposed.
-- Keep the admin password strong; secrets are stored as bcrypt hashes.
-- Don't share secret keys; regenerate via the admin panel if one leaks.
-- Presigned share links grant download access until they expire - keep the
-  expiry short and only share over trusted channels.
-- Check `data/` permissions after upload: the directory and its contents must
-  not be readable by the web server (the bundled `.htaccess` denies it on
-  Apache; the nginx sample denies it too).
+- Enable admin 2FA (and/or a passkey) if the panel is exposed.
+- Strong admin password (bcrypt-hashed); use **Sessions → Revoke others**
+  after any incident, and regenerate leaked user keys (or **Disable** the user
+  to block keys instantly while keeping data).
+- Keep presigned-link expiries short; share only over trusted channels.
+- Confirm `data/` is not web-readable after upload (bundled rules cover
+  Apache + the nginx sample).
 
 ## Releases
 
-Every commit is released on GitHub with a version bump: the commit itself
-sets `APP_VERSION` in `config.php` (shown in the admin Settings footer) and
-is tagged `vX.Y.Z` (patch bump per commit, starting at 1.0.0), then pushed
-with the tag. Each GitHub Release includes the full **source code** (the
-auto-generated zip/tar.gz of the tag - `data/` is gitignored, so live
-objects and the database are never included).
+Every commit is released on GitHub with a version bump: the commit sets
+`APP_VERSION` in `config.php` (shown in the Settings footer) and is tagged
+`vX.Y.Z`, then pushed with the tag. Each Release ships the full source
+(`data/` is gitignored, so live objects and the database never ship).

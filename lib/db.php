@@ -110,6 +110,9 @@ function db_init(): void
     if (!in_array('passkey_handle', $colNames, true)) {
         $pdo->exec('ALTER TABLE admin ADD COLUMN passkey_handle TEXT');
     }
+    if (!in_array('session_ver', $colNames, true)) {
+        $pdo->exec('ALTER TABLE admin ADD COLUMN session_ver INTEGER NOT NULL DEFAULT 1');
+    }
     // Admin passkeys (WebAuthn / passwordless login).
     $pdo->exec('CREATE TABLE IF NOT EXISTS admin_passkeys (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -129,6 +132,9 @@ function db_init(): void
     }
     if (!in_array('quota_bytes', $userColNames, true)) {
         $pdo->exec('ALTER TABLE users ADD COLUMN quota_bytes INTEGER NOT NULL DEFAULT 0');
+    }
+    if (!in_array('disabled', $userColNames, true)) {
+        $pdo->exec('ALTER TABLE users ADD COLUMN disabled INTEGER NOT NULL DEFAULT 0');
     }
     // Soft-deleted objects (admin UI) waiting for restore / expiry.
     $pdo->exec('CREATE TABLE IF NOT EXISTS trash (

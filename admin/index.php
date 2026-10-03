@@ -24,60 +24,68 @@ $faviconUrl = '/favicon.ico' . ($favPath !== null && is_file($favPath) ? '?v=' .
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<meta name="theme-color" media="(prefers-color-scheme: light)" content="#F9F9FF">
-<meta name="theme-color" media="(prefers-color-scheme: dark)" content="#111318">
+<meta name="theme-color" media="(prefers-color-scheme: light)" content="#eef1f6">
+<meta name="theme-color" media="(prefers-color-scheme: dark)" content="#0a1120">
 <title><?= htmlspecialchars($title) ?></title>
 <link rel="icon" href="<?= htmlspecialchars($faviconUrl) ?>">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<script>
+/* Set the theme before first paint so the page never flashes the wrong
+   canvas. Resolution order mirrors the toggle logic below; keep in sync. */
+(function(){try{var s=localStorage.getItem('minis3_theme');if(s!=='light'&&s!=='dark'){s=(window.matchMedia&&window.matchMedia('(prefers-color-scheme: dark)').matches)?'dark':'light';}document.documentElement.setAttribute('data-theme',s);}catch(e){}})();
+</script>
 <style>
 /* ============ Material 3 design tokens ============ */
 :root{
-    color-scheme:light;
-    --primary:#0B57D0; --on-primary:#FFFFFF;
-    --primary-container:#D3E3FD; --on-primary-container:#041E49;
-    --secondary:#575E71; --on-secondary:#FFFFFF;
-    --secondary-container:#DAE2F9; --on-secondary-container:#131B2C;
-    --tertiary-container:#E5DFF5; --on-tertiary-container:#292043;
-    --surface:#F9F9FF; --surface-1:#FFFFFF; --surface-2:#EEF0F8; --surface-3:#E8EAF4;
-    --on-surface:#191C22; --on-surface-var:#44474E;
-    --outline:#74777F; --outline-var:#C4C6D0;
-    --error:#BA1A1A; --on-error:#FFFFFF; --error-container:#FFDAD6; --on-error-container:#410002;
-    --ok:#146C2E; --ok-container:#C6F0D2; --on-ok-container:#072711;
-    --warn:#8F5000; --warn-container:#FFDCBE; --on-warn-container:#2E1500;
-    --inverse-surface:#2E3136; --inverse-on-surface:#F2F0F4; --inverse-primary:#A8C7FA;
-    --row-hover:rgba(25,28,34,.045); --row-sel:rgba(11,87,208,.09);
-    --scrim:rgba(20,24,32,.44);
-    --shadow-1:0 1px 2px rgba(9,17,30,.10),0 1px 3px 1px rgba(9,17,30,.06);
-    --shadow-2:0 1px 2px rgba(9,17,30,.12),0 2px 6px 2px rgba(9,17,30,.08);
-    --shadow-3:0 4px 8px 3px rgba(9,17,30,.10),0 1px 3px rgba(9,17,30,.14);
+    color-scheme:dark;
+    --primary:#d38a4d; --on-primary:#2a1305;
+    --primary-container:#3d2c1a; --on-primary-container:#f0c48d;
+    --secondary:#4fd2c6; --on-secondary:#062521;
+    --secondary-container:#173b37; --on-secondary-container:#b6f0ea;
+    --tertiary-container:#2a2440; --on-tertiary-container:#d9cfff;
+    --surface:#0a1120; --surface-1:#101a2c; --surface-2:#0c1626; --surface-3:#142035;
+    --on-surface:#eaf0f8; --on-surface-var:#8b98b0;
+    --outline:#33445f; --outline-var:#1e2c44;
+    --error:#ef5f5f; --on-error:#2b0b0b; --error-container:#3d1d1d; --on-error-container:#ffb3b3;
+    --ok:#3ed399; --ok-container:#14382a; --on-ok-container:#a8f2d6;
+    --warn:#eab35a; --warn-container:#3d2c12; --on-warn-container:#ffd9a0;
+    --inverse-surface:#eaf0f8; --inverse-on-surface:#0a1120; --inverse-primary:#9a5a22;
+    --row-hover:rgba(211,138,77,.08); --row-sel:rgba(211,138,77,.14);
+    --scrim:rgba(5,10,16,.62);
+    --shadow-1:0 1px 2px rgba(0,0,0,.4),0 1px 3px 1px rgba(0,0,0,.3);
+    --shadow-2:0 8px 28px rgba(0,0,0,.45),0 2px 6px 2px rgba(0,0,0,.35);
+    --shadow-3:0 16px 44px -12px rgba(0,0,0,.6),0 1px 3px rgba(0,0,0,.5);
     --ease-emph:cubic-bezier(.2,0,0,1);
     --ease-standard:cubic-bezier(.2,0,.2,1);
 }
-[data-theme="dark"]{
-    color-scheme:dark;
-    --primary:#A8C7FA; --on-primary:#062E6F;
-    --primary-container:#0842A0; --on-primary-container:#D3E3FD;
-    --secondary:#BFC6DC; --on-secondary:#293041;
-    --secondary-container:#3F4759; --on-secondary-container:#DAE2F9;
-    --tertiary-container:#4A4458; --on-tertiary-container:#E6DEFF;
-    --surface:#111318; --surface-1:#1B1E24; --surface-2:#20242B; --surface-3:#262A31;
-    --on-surface:#E3E2E9; --on-surface-var:#C4C6D0;
-    --outline:#8E9099; --outline-var:#44474E;
-    --error:#FFB4AB; --on-error:#690005; --error-container:#93000A; --on-error-container:#FFDAD6;
-    --ok:#6DD58C; --ok-container:#0F5223; --on-ok-container:#C6F0D2;
-    --warn:#FFB868; --warn-container:#6B3D00; --on-warn-container:#FFDCBE;
-    --inverse-surface:#E3E2E9; --inverse-on-surface:#111318; --inverse-primary:#0B57D0;
-    --row-hover:rgba(227,226,233,.05); --row-sel:rgba(168,199,250,.13);
-    --scrim:rgba(0,0,0,.55);
-    --shadow-1:0 1px 2px rgba(0,0,0,.5),0 1px 3px 1px rgba(0,0,0,.35);
-    --shadow-2:0 1px 2px rgba(0,0,0,.55),0 2px 6px 2px rgba(0,0,0,.4);
-    --shadow-3:0 4px 8px 3px rgba(0,0,0,.45),0 1px 3px rgba(0,0,0,.55);
+[data-theme="light"]{
+    color-scheme:light;
+    --primary:#b26a2a; --on-primary:#ffffff;
+    --primary-container:#f3ddc2; --on-primary-container:#4a2c10;
+    --secondary:#0e7c74; --on-secondary:#ffffff;
+    --secondary-container:#cdebe8; --on-secondary-container:#0b3f3a;
+    --tertiary-container:#e2d9fb; --on-tertiary-container:#2c2350;
+    --surface:#eef1f6; --surface-1:#ffffff; --surface-2:#f4f6fa; --surface-3:#e9eef5;
+    --on-surface:#121a29; --on-surface-var:#55627a;
+    --outline:#b9c2d2; --outline-var:#d7dee9;
+    --error:#b3261e; --on-error:#ffffff; --error-container:#f9dedc; --on-error-container:#410002;
+    --ok:#10714c; --ok-container:#c9efda; --on-ok-container:#072711;
+    --warn:#8a5b06; --warn-container:#f7e3c2; --on-warn-container:#2e1500;
+    --inverse-surface:#121a29; --inverse-on-surface:#eef1f6; --inverse-primary:#e6a165;
+    --row-hover:rgba(178,106,42,.07); --row-sel:rgba(178,106,42,.13);
+    --scrim:rgba(15,23,42,.44);
+    --shadow-1:0 1px 2px rgba(16,30,55,.10),0 1px 3px 1px rgba(16,30,55,.06);
+    --shadow-2:0 8px 28px -10px rgba(16,30,55,.18),0 2px 6px 2px rgba(16,30,55,.08);
+    --shadow-3:0 12px 28px rgba(15,23,42,.14),0 1px 3px rgba(15,23,42,.12);
 }
 
 /* ============ base ============ */
 *{box-sizing:border-box}
 html{-webkit-text-size-adjust:100%}
 body{
-    margin:0;font-family:"Roboto Flex","Roboto",system-ui,-apple-system,"Segoe UI",Arial,sans-serif;
+    margin:0;font-family:'Space Grotesk',system-ui,-apple-system,'Segoe UI',Roboto,Arial,sans-serif;
     background:var(--surface);color:var(--on-surface);font-size:14px;line-height:1.5;
     transition:background-color .25s var(--ease-standard),color .25s var(--ease-standard);
     min-height:100vh;display:flex;flex-direction:column;
@@ -601,8 +609,14 @@ body.busy .grid tbody,body.busy .cards,body.busy .stat-panel{opacity:.55;transit
     .grid th,.grid td{padding:9px 10px}
     #filesView .grid th:nth-child(3),#filesView .grid th:nth-child(4),#filesView .grid th:nth-child(5),
     #filesView .grid td:nth-child(3),#filesView .grid td:nth-child(4),#filesView .grid td:nth-child(5){display:none}
-    #tab-users .grid th:nth-child(2),#tab-users .grid th:nth-child(3),#tab-users .grid th:nth-child(5),
-    #tab-users .grid td:nth-child(2),#tab-users .grid td:nth-child(3),#tab-users .grid td:nth-child(5){display:none}
+    #tab-users .grid th:nth-child(2),#tab-users .grid th:nth-child(3),#tab-users .grid th:nth-child(6),
+    #tab-users .grid td:nth-child(2),#tab-users .grid td:nth-child(3),#tab-users .grid td:nth-child(6){display:none}
+    #tab-users .grid th:last-child,#tab-users .grid td:last-child{width:auto}
+    #tab-users .actions{max-width:172px;gap:4px}
+    #bucketView .grid th:nth-child(2),#bucketView .grid td:nth-child(2),
+    #bucketView .grid th:nth-child(5),#bucketView .grid td:nth-child(5){display:none}
+    #bucketView .grid th:last-child,#bucketView .grid td:last-child{width:auto}
+    #bucketView .actions{max-width:172px;gap:4px}
     #filesView .grid td:nth-child(2){min-width:130px;max-width:230px}
     .actions{white-space:normal;display:flex;flex-wrap:wrap;justify-content:flex-end;gap:4px}
     .actions .btn{margin-left:0}
@@ -625,6 +639,163 @@ body.busy .grid tbody,body.busy .cards,body.busy .stat-panel{opacity:.55;transit
     .card:not(.stat-panel){margin:24px auto;padding:20px}
     #main{padding:12px 10px calc(104px + env(safe-area-inset-bottom))}
 }
+
+/* ============ field-instrument pass (HVAC suite identity) ============ */
+body{font-family:'Space Grotesk',system-ui,-apple-system,'Segoe UI',Roboto,Arial,sans-serif;
+    background-color:var(--surface);
+    background-image:linear-gradient(rgba(96,150,214,.07) 1px,transparent 1px),linear-gradient(90deg,rgba(96,150,214,.07) 1px,transparent 1px);
+    background-size:28px 28px;background-attachment:fixed}
+[data-theme="light"] body{background-image:linear-gradient(rgba(51,90,148,.06) 1px,transparent 1px),linear-gradient(90deg,rgba(51,90,148,.06) 1px,transparent 1px)}
+h1,h2,h3,h4{font-family:'Space Grotesk',system-ui,-apple-system,'Segoe UI',Roboto,Arial,sans-serif;letter-spacing:-.01em}
+::selection{background:rgba(211,138,77,.25)}
+:focus-visible{outline-color:var(--primary)}
+/* mono for every calculated readout */
+.stat-value,.grid td,code,.kbd,.pager .pageinfo,.legend,.chart .h,.ra-uri,.upload-name,.upload-state,.files-meta,.tu-row>span:last-child{font-family:'IBM Plex Mono',ui-monospace,'SFMono-Regular',Menlo,Consolas,'Courier New',monospace}
+.stat-value{letter-spacing:-.02em}
+/* brand + app bar */
+.brand-mark{background:linear-gradient(155deg,#d38a4d,#a85f28) !important;color:#2a1305 !important;border-radius:9px !important;box-shadow:none !important}
+#appBar{background:var(--surface);border-bottom:1px solid var(--outline-var)}
+@supports (background:color-mix(in srgb,red 50%,transparent)){ #appBar{background:color-mix(in srgb,var(--surface) 86%,transparent);backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px)} }
+.brand-title{font-weight:700}
+/* nav rail/destinations: copper active pill */
+.nav-dest.active .nav-pill{background:var(--primary)}
+.nav-dest.active .nav-ic{color:var(--on-primary)}
+.nav-dest.active{color:var(--on-surface)}
+/* buttons: instrument geometry */
+.btn{border-radius:6px}
+.icon-btn{border-radius:10px}
+.fab{border-radius:12px}
+.pager select,.csel-btn,.searchfield,.files-meta,.csel-list,.ctxmenu{border-radius:8px}
+#modalBox{border-radius:16px;border:1px solid var(--outline-var)}
+/* text fields: copper focus ring */
+.tf>input:focus,.tf>select:focus,.tf>textarea:focus{border-color:var(--primary);box-shadow:0 0 0 3px rgba(211,138,77,.18)}
+.tf>input:focus+label,.tf>select:focus+label{color:var(--primary)}
+/* tables */
+.tablewrap{border:1px solid var(--outline-var)}
+.grid th{letter-spacing:.8px}
+.grid tr:hover td{background:var(--row-hover)}
+/* links read cyan, like the suite */
+.link,.crumb{color:var(--secondary)}
+.link:hover,.crumb:hover{color:var(--primary)}
+/* status pills get suite-style rims */
+.st{border:1px solid var(--outline-var)}
+.st2{border-color:rgba(62,211,153,.4)}
+.st4{border-color:rgba(234,179,90,.4)}
+.st5{border-color:rgba(239,95,95,.4)}
+/* bulk bar: copper wash */
+.bulkbar{background:rgba(211,138,77,.12);color:var(--on-surface);border:1px solid var(--primary);border-radius:10px}
+/* selected dropdown / folder rows: copper */
+.csel-item.sel{background:var(--primary);color:var(--on-primary)}
+.fp-item.sel{background:rgba(211,138,77,.14);color:var(--primary)}
+/* stat instruments */
+.stat-card{background:var(--surface-2);border:1px solid var(--outline-var);box-shadow:none}
+.stat-card:hover{border-color:var(--primary)}
+.stat-ic{background:rgba(211,138,77,.12) !important;border:1px solid var(--primary);color:var(--primary) !important;border-radius:10px !important}
+.stat-panel{border:1px solid var(--outline-var)}
+/* toast: suite pill */
+#toast{border-radius:999px;border:1px solid var(--primary);background:var(--surface-1);color:var(--on-surface)}
+#toast.toast-err{background:var(--error-container);color:var(--on-error-container);border-color:var(--error)}
+#toast.toast-ok{background:var(--surface-1);border-color:var(--ok);color:var(--on-surface)}
+#toast.toast-ok .t-ic{color:var(--ok)}
+/* dropdowns / menus */
+.csel-list{background:var(--surface-1);border:1px solid var(--outline-var)}
+.ctxmenu{background:var(--surface-1);border:1px solid var(--outline-var)}
+/* login */
+.login-card{background:linear-gradient(140deg,rgba(211,138,77,.1),transparent 45%),var(--surface-1);border:1px solid var(--outline-var)}
+.login-logo{background:linear-gradient(155deg,#d38a4d,#a85f28) !important;color:#2a1305 !important;box-shadow:none !important}
+.kicker{display:block;font-size:.74rem;color:var(--primary);font-weight:600;margin-bottom:.3rem}
+.gcard{border:1px solid var(--outline-var)}
+.gcard.sel{border-color:var(--primary)}
+.spinner{border-color:var(--surface-3);border-top-color:var(--primary)}
+/* dashboard: segmented range + clickable cards/rows */
+.segmented{display:inline-flex;background:var(--surface-2);border:1px solid var(--outline-var);border-radius:8px;padding:3px;gap:2px}
+.segmented button{border:0;background:transparent;color:var(--on-surface-var);font-size:12.5px;font-weight:600;padding:6px 14px;border-radius:5px;cursor:pointer;min-height:0 !important}
+.segmented button.active{background:var(--primary);color:var(--on-primary)}
+.segmented button:not(.active):hover{color:var(--on-surface)}
+.stat-card[data-goto]{cursor:pointer}
+.tu-click{cursor:pointer;border-radius:8px}
+.tu-click:hover{background:var(--row-hover)}
+.logjump{flex:none}
+.ra-row .logjump{opacity:0}
+.ra-row:hover .logjump,.ra-row:focus-within .logjump{opacity:1}
+/* key rows: readonly field + per-field copy button */
+.keyrow{display:flex;align-items:center;gap:8px;margin:16px 0}
+.keyrow .tf{flex:1;margin:0}
+.keyrow .icon-btn{flex:none;border:1px solid var(--outline-var)}
+.keyrow .icon-btn:hover{border-color:var(--primary);color:var(--primary)}
+.keyrow .icon-btn.on{border-color:var(--primary);color:var(--primary);background:rgba(211,138,77,.12)}
+.st-off{color:var(--on-surface-var);border-color:var(--outline-var)}
+tr.off td{opacity:.55}
+.stat-delta{display:block;font-size:11px;font-family:'IBM Plex Mono',ui-monospace,Menlo,Consolas,monospace;margin-top:2px}
+.stat-delta.up{color:var(--ok)}
+.stat-delta.down{color:var(--error)}
+.stat-delta.flat{color:var(--on-surface-var)}
+tr.slow td:last-child{color:var(--warn);font-weight:700}
+.icon-btn.on{border:1px solid var(--primary);color:var(--primary);background:rgba(211,138,77,.12)}
+/* SteamFinder-style theme toggle: bordered square, icon swaps with theme */
+#themeBtn{width:32px;height:32px;flex:none;padding:0;border:1px solid var(--outline-var);border-radius:6px;background:var(--surface-2);color:var(--on-surface-var)}
+#themeBtn:hover{background:var(--surface-2);border-color:var(--primary);color:var(--primary)}
+#themeBtn .tt-sun{display:none}
+#themeBtn .tt-moon{display:inline-flex}
+[data-theme="light"] #themeBtn .tt-sun{display:inline-flex}
+[data-theme="light"] #themeBtn .tt-moon{display:none}
+/* success action (e.g. re-enable user) */
+.btn-ok{background:var(--ok);color:#062419}
+.btn-ok:hover{box-shadow:var(--shadow-1);filter:brightness(1.08)}
+[data-theme="light"] .btn-ok{color:#fff}
+/* suite scale: SteamFinder-compact density */
+body{font-size:13.5px}
+.btn{height:36px;padding:0 18px;font-size:13px}
+.btn-sm{height:30px;padding:0 12px;font-size:12.5px}
+.icon-btn{width:36px;height:36px}
+.icon-btn.sm{width:30px;height:30px}
+#main{padding:18px 20px 36px}
+.toolbar h3{font-size:15px}
+.grid th{padding:10px 14px;font-size:11px}
+.grid td{padding:9px 14px;font-size:13px}
+.tf>input,.tf>select,.tf>textarea{height:46px;font-size:14px}
+.card{padding:20px}
+#modalBox{padding:20px}
+.modal-actions{margin-top:16px}
+.stat-card{padding:14px;gap:12px}
+.stat-ic{width:40px;height:40px}
+.stat-value{font-size:20px}
+.chart{height:100px}
+#appBar{padding:8px 16px}
+.brand-mark{width:34px;height:34px;border-radius:10px}
+.searchfield{height:38px}
+.login-logo{width:52px;height:52px;border-radius:14px}
+.fab{height:52px;min-width:52px}
+#navRail{width:88px}
+.nav-dest{width:72px}
+.nav-pill{width:52px;height:30px}
+.pager .btn{height:32px}
+@media(max-width:768px){
+.actions .btn{height:30px;padding:0 10px;font-size:12px}
+#main{padding:12px 12px calc(104px + env(safe-area-inset-bottom))}
+.cards{gap:10px}
+.stat-card{padding:12px}
+.stat-value{font-size:18px}
+.toolbar h3{font-size:14px}
+.login-logo{width:48px;height:48px}
+}
+.connect-pre{font-family:'IBM Plex Mono',ui-monospace,Menlo,Consolas,monospace;font-size:12px;line-height:1.6;background:var(--surface-2);border:1px solid var(--outline-var);border-radius:8px;padding:12px 14px;white-space:pre-wrap;overflow-wrap:anywhere;margin:0 0 4px}
+/* command palette */
+#paletteOverlay{position:fixed;inset:0;background:var(--scrim);z-index:110;display:flex;justify-content:center;align-items:flex-start;padding:12vh 16px 16px;animation:fadeIn .15s var(--ease-standard)}
+#paletteBox{width:min(580px,100%);background:var(--surface-1);border:1px solid var(--outline-var);border-radius:16px;box-shadow:var(--shadow-3);overflow:hidden;animation:scaleIn .18s var(--ease-emph)}
+.pal-search{margin:12px 12px 4px;max-width:none}
+#paletteList{max-height:340px;overflow:auto;padding:6px 8px 8px;overscroll-behavior:contain}
+.pal-sec{font-size:11px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--on-surface-var);padding:8px 10px 4px}
+.pal-item{display:flex;align-items:center;gap:12px;width:100%;text-align:left;background:transparent;border:0;border-radius:10px;padding:10px 12px;color:var(--on-surface);cursor:pointer;font-family:inherit;font-size:13.5px;min-height:0}
+.pal-item .ficon{width:20px;height:20px;color:var(--on-surface-var);flex:none;display:inline-flex}
+.pal-item .pt{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.pal-item .ps{color:var(--on-surface-var);font-size:12px;flex:none;font-family:'IBM Plex Mono',ui-monospace,Menlo,Consolas,monospace}
+.pal-item.sel{background:rgba(211,138,77,.14)}
+.pal-item.sel .ficon{color:var(--primary)}
+.pal-empty{padding:22px;text-align:center;color:var(--on-surface-var);font-size:13px}
+.pal-foot{display:flex;gap:16px;padding:8px 16px;border-top:1px solid var(--outline-var);color:var(--on-surface-var);font-size:12px}
+#tab-settings .card h3{margin-bottom:2px}
+
 </style>
 </head>
 <body>
@@ -636,6 +807,7 @@ body.busy .grid tbody,body.busy .cards,body.busy .stat-panel{opacity:.55;transit
   </div>
   <div class="appbar-right">
     <span id="headerUser" class="user-chip hidden"></span>
+    <button id="paletteBtn" class="icon-btn" data-icon="search" title="Search & commands (Ctrl+K)" aria-label="Search and commands"></button>
     <button id="themeBtn" class="icon-btn" title="Toggle dark / light theme" aria-label="Toggle dark / light theme"></button>
     <button id="logoutBtn" class="icon-btn hidden" data-icon="log-out" title="Log out" aria-label="Log out"></button>
   </div>
@@ -655,6 +827,7 @@ body.busy .grid tbody,body.busy .cards,body.busy .stat-panel{opacity:.55;transit
     <div id="loginBox" class="hidden">
       <div class="card login-card">
         <div class="login-logo" data-icon="bucket-logo"></div>
+        <div class="kicker">Object storage console</div>
         <h2>Sign in</h2>
         <p class="muted" style="margin:0 0 6px">Admin credentials (set during installation)</p>
         <form id="loginForm">
@@ -681,19 +854,24 @@ body.busy .grid tbody,body.busy .cards,body.busy .stat-panel{opacity:.55;transit
       <section id="tab-stats" class="tab-panel">
         <div class="toolbar">
           <h3>Overview</h3>
+          <div class="segmented" role="group" aria-label="Chart range">
+            <button type="button" data-range="24h" class="active">24h</button>
+            <button type="button" data-range="7d">7d</button>
+            <button type="button" data-range="30d">30d</button>
+          </div>
           <button id="refreshStatsBtn" class="btn btn-tonal"><span class="bi" data-icon="refresh"></span>Refresh</button>
         </div>
         <div class="cards">
-          <div class="stat-card"><span class="stat-ic" data-icon="users"></span><span class="stat-body"><span class="stat-label">Users</span><span class="stat-value" id="stUsers">&ndash;</span></span></div>
-          <div class="stat-card"><span class="stat-ic" data-icon="hard-drive"></span><span class="stat-body"><span class="stat-label">Buckets</span><span class="stat-value" id="stBuckets">&ndash;</span></span></div>
-          <div class="stat-card"><span class="stat-ic" data-icon="box"></span><span class="stat-body"><span class="stat-label">Objects</span><span class="stat-value" id="stObjects">&ndash;</span></span></div>
-          <div class="stat-card"><span class="stat-ic" data-icon="database"></span><span class="stat-body"><span class="stat-label">Storage used</span><span class="stat-value" id="stSize">&ndash;</span></span></div>
-          <div class="stat-card"><span class="stat-ic" data-icon="activity"></span><span class="stat-body"><span class="stat-label">Requests</span><span class="stat-value" id="stRequests">&ndash;</span></span></div>
-          <div class="stat-card"><span class="stat-ic" data-icon="zap"></span><span class="stat-body"><span class="stat-label">Avg response</span><span class="stat-value" id="stAvgMs">&ndash;</span></span></div>
+          <div class="stat-card" data-goto="users" title="Go to users"><span class="stat-ic" data-icon="users"></span><span class="stat-body"><span class="stat-label">Users</span><span class="stat-value" id="stUsers">&ndash;</span></span></div>
+          <div class="stat-card" data-goto="buckets" title="Go to buckets"><span class="stat-ic" data-icon="hard-drive"></span><span class="stat-body"><span class="stat-label">Buckets</span><span class="stat-value" id="stBuckets">&ndash;</span></span></div>
+          <div class="stat-card" data-goto="buckets" title="Go to buckets"><span class="stat-ic" data-icon="box"></span><span class="stat-body"><span class="stat-label">Objects</span><span class="stat-value" id="stObjects">&ndash;</span></span></div>
+          <div class="stat-card" data-goto="buckets" title="Go to buckets"><span class="stat-ic" data-icon="database"></span><span class="stat-body"><span class="stat-label">Storage used</span><span class="stat-value" id="stSize">&ndash;</span></span></div>
+          <div class="stat-card" data-goto="logs" title="Go to logs"><span class="stat-ic" data-icon="activity"></span><span class="stat-body"><span class="stat-label">Requests</span><span class="stat-value" id="stRequests">&ndash;</span><span class="stat-delta" id="stReqDelta"></span></span></div>
+          <div class="stat-card" data-goto="logs" title="Go to logs"><span class="stat-ic" data-icon="zap"></span><span class="stat-body"><span class="stat-label">Avg response</span><span class="stat-value" id="stAvgMs">&ndash;</span></span></div>
         </div>
         <div class="stats-grid">
           <div class="card stat-panel">
-            <h3 style="margin-bottom:14px">Request status distribution</h3>
+            <h3 style="margin-bottom:14px">Request status distribution <span class="stat-delta" id="stErrDelta" style="display:inline;margin-left:8px"></span></h3>
             <div class="stacked"><div class="bar-2xx" id="bar2xx"></div><div class="bar-4xx" id="bar4xx"></div><div class="bar-5xx" id="bar5xx"></div></div>
             <div class="legend">
               <span class="l2xx">2xx <b id="lbl2xx">0</b></span>
@@ -702,7 +880,7 @@ body.busy .grid tbody,body.busy .cards,body.busy .stat-panel{opacity:.55;transit
             </div>
           </div>
           <div class="card stat-panel">
-            <h3 style="margin-bottom:14px">Requests last 24 hours</h3>
+            <h3 style="margin-bottom:14px" id="chartTitle">Requests last 24 hours</h3>
             <div class="chart" id="chart24"></div>
           </div>
         </div>
@@ -721,6 +899,7 @@ body.busy .grid tbody,body.busy .cards,body.busy .stat-panel{opacity:.55;transit
       <section id="tab-users" class="tab-panel hidden">
         <div class="toolbar">
           <h3>S3 users (access key + secret key)</h3>
+          <div class="searchfield"><span data-icon="search"></span><input type="search" id="userSearch" placeholder="Search users..." autocomplete="off" aria-label="Search users"></div>
           <button id="addUserBtn" class="btn btn-filled"><span class="bi" data-icon="user-plus"></span>Add user</button>
         </div>
         <div class="tablewrap">
@@ -729,8 +908,9 @@ body.busy .grid tbody,body.busy .cards,body.busy .stat-panel{opacity:.55;transit
               <th><button type="button" class="sortbtn" data-usort="username">Username<span class="sortmark"></span></button></th>
               <th>Access key</th><th>Secret key</th>
               <th><button type="button" class="sortbtn" data-usort="storage_used">Storage<span class="sortmark"></span></button></th>
+              <th><button type="button" class="sortbtn" data-usort="last_active">Active<span class="sortmark"></span></button></th>
               <th><button type="button" class="sortbtn" data-usort="created_at">Created<span class="sortmark"></span></button></th>
-              <th style="width:200px"></th></tr></thead>
+              <th style="width:250px"></th></tr></thead>
             <tbody id="usersTbody"></tbody>
           </table>
         </div>
@@ -749,6 +929,7 @@ body.busy .grid tbody,body.busy .cards,body.busy .stat-panel{opacity:.55;transit
               <th><button type="button" class="sortbtn" data-bsort="name">Name<span class="sortmark"></span></button></th>
               <th><button type="button" class="sortbtn" data-bsort="username">User<span class="sortmark"></span></button></th>
               <th><button type="button" class="sortbtn" data-bsort="object_count">Objects<span class="sortmark"></span></button></th>
+              <th><button type="button" class="sortbtn" data-bsort="size">Size<span class="sortmark"></span></button></th>
               <th><button type="button" class="sortbtn" data-bsort="created_at">Created<span class="sortmark"></span></button></th>
               <th style="width:240px"></th></tr></thead>
               <tbody id="bucketsTbody"></tbody>
@@ -819,6 +1000,8 @@ body.busy .grid tbody,body.busy .cards,body.busy .stat-panel{opacity:.55;transit
             <option value="5xx">5xx</option>
           </select>
           <button id="refreshLogsBtn" class="icon-btn" data-icon="refresh" title="Refresh" aria-label="Refresh"></button>
+          <button id="tailLogsBtn" class="icon-btn" data-icon="activity" title="Live tail (refresh every 5s)" aria-label="Live tail"></button>
+          <button id="exportLogsBtn" class="icon-btn" data-icon="download" title="Export filtered logs as CSV" aria-label="Export logs as CSV"></button>
           <button id="clearLogsBtn" class="btn btn-danger btn-sm"><span class="bi" data-icon="trash"></span>Clear logs</button>
         </div>
         <div id="logHint" class="muted hidden" style="margin:-4px 0 10px"></div>
@@ -932,6 +1115,36 @@ body.busy .grid tbody,body.busy .cards,body.busy .stat-panel{opacity:.55;transit
           <button id="addPasskeyBtn" class="btn btn-tonal"><span class="bi" data-icon="key"></span>Add passkey</button>
           <div id="passkeyError" class="error hidden"></div>
         </div>
+        <div class="card" style="margin:0 0 16px;max-width:640px">
+          <h3>Connect a client</h3>
+          <p class="muted" style="margin:2px 0 10px">Endpoint, region and ready-to-paste credentials for S3-compatible tools.</p>
+          <div class="tf float" style="max-width:280px"><select id="connectUser" class="has-value"></select><label>S3 user</label><span class="tf-caret"><span data-icon="chevron-down"></span></span></div>
+          <div class="tf"><input id="connectEndpoint" readonly placeholder=" "><label>Endpoint URL</label></div>
+          <div class="tf"><input id="connectRegion" readonly value="us-east-1" placeholder=" "><label>Region</label></div>
+          <p style="margin:12px 0 6px">AWS CLI</p>
+          <pre id="connectCli" class="connect-pre"></pre>
+          <div class="modal-actions" style="justify-content:flex-start">
+            <button id="connectCopyCli" class="btn btn-tonal btn-sm"><span class="bi" data-icon="copy"></span>Copy AWS CLI config</button>
+            <button id="connectCopyRclone" class="btn btn-tonal btn-sm"><span class="bi" data-icon="copy"></span>Copy rclone remote</button>
+          </div>
+        </div>
+        <div class="card" style="margin:0 0 16px;max-width:640px">
+          <h3>Backup &amp; restore</h3>
+          <p class="muted" style="margin:2px 0 10px">Export users (with keys), buckets and panel settings as JSON. Import recreates missing users and buckets; object data is not included - re-upload files afterwards.</p>
+          <div class="modal-actions" style="justify-content:flex-start">
+            <button id="backupExportBtn" class="btn btn-tonal btn-sm"><span class="bi" data-icon="download"></span>Export backup</button>
+            <button id="backupImportBtn" class="btn btn-tonal btn-sm"><span class="bi" data-icon="upload"></span>Import backup</button>
+            <input type="file" id="backupInput" class="hidden" accept=".json,application/json">
+          </div>
+          <div id="backupError" class="error hidden"></div>
+        </div>
+        <div class="card" style="margin:0 0 16px;max-width:640px;border-color:var(--error)">
+          <h3>Sessions</h3>
+          <p class="muted" style="margin:2px 0 10px">This browser session stays signed in. Revoking signs out every other browser and device immediately.</p>
+          <div class="modal-actions" style="justify-content:flex-start">
+            <button id="revokeSessionsBtn" class="btn btn-danger btn-sm"><span class="bi" data-icon="key"></span>Revoke all other sessions</button>
+          </div>
+        </div>
         <div class="card" style="margin:0;max-width:640px">
           <div class="toolbar" style="margin-bottom:10px">
             <h3 style="flex:1">In-progress multipart uploads</h3>
@@ -960,6 +1173,11 @@ body.busy .grid tbody,body.busy .cards,body.busy .stat-panel{opacity:.55;transit
 </nav>
 
 <div id="modalOverlay" class="hidden"><div id="modalBox"></div></div>
+<div id="paletteOverlay" class="hidden"><div id="paletteBox" role="dialog" aria-label="Search and commands">
+  <div class="searchfield pal-search"><span data-icon="search"></span><input id="paletteInput" placeholder="Type a command, user, bucket or object key..." autocomplete="off" aria-label="Search and commands"></div>
+  <div id="paletteList"></div>
+  <div class="pal-foot"><span><span class="kbd">↑↓</span> navigate</span><span><span class="kbd">↵</span> open</span><span><span class="kbd">esc</span> close</span></div>
+</div></div>
 <div id="loadingOverlay" class="hidden"><div class="spinner"></div><span class="lbl">Loading&hellip;</span></div>
 <div id="toast" class="hidden" role="status"></div>
 
@@ -970,6 +1188,7 @@ const state = { csrf: '', users: [], userId: 0, bucketId: 0, prefix: '', buckets
     objView: 'list', userSort: { col: 'username', dir: 'asc' }, bucketSort: { col: 'name', dir: 'asc' },
     logs: [], logTotal: 0, logPage: 1, logPages: 1, logPerPage: 100,
     trash: [], trashTotal: 0, trashPage: 1, trashPages: 1, trashPerPage: 50, trashEnabled: true,
+    statRange: '24h',
     totp: false, version: '' };
 
 const $ = (sel, el) => (el || document).querySelector(sel);
@@ -1258,10 +1477,27 @@ function fmtRel(ts) {
     return fmtTime(ts);
 }
 function copyText(text) {
-    if (navigator.clipboard) {
-        navigator.clipboard.writeText(text).then(() => toast('Copied to clipboard', 'ok')).catch(() => toast('Copy failed', 'err'));
+    const done = () => toast('Copied to clipboard', 'ok');
+    const fail = () => toast('Copy failed', 'err');
+    const fallbackCopy = () => {
+        try {
+            const ta = document.createElement('textarea');
+            ta.value = text;
+            ta.style.position = 'fixed';
+            ta.style.opacity = '0';
+            document.body.appendChild(ta);
+            ta.select();
+            const ok = document.execCommand('copy');
+            ta.remove();
+            if (ok) done(); else fail();
+        } catch (e) { fail(); }
+    };
+    // Async Clipboard API needs a secure context (HTTPS or localhost);
+    // otherwise use the execCommand fallback so HTTP/LAN hosts still work.
+    if (navigator.clipboard && window.isSecureContext) {
+        navigator.clipboard.writeText(text).then(done).catch(fallbackCopy);
     } else {
-        toast('Clipboard not available', 'err');
+        fallbackCopy();
     }
 }
 
@@ -1269,7 +1505,7 @@ function copyText(text) {
 function applyTheme(dark) {
     document.documentElement.dataset.theme = dark ? 'dark' : 'light';
     const b = $('#themeBtn');
-    b.innerHTML = icon(dark ? 'sun' : 'moon');
+    b.innerHTML = '<span class="tt-sun">' + icon('sun', 16) + '</span><span class="tt-moon">' + icon('moon', 16) + '</span>';
     b.setAttribute('aria-label', dark ? 'Switch to light theme' : 'Switch to dark theme');
     try { localStorage.setItem('minis3_theme', dark ? 'dark' : 'light'); } catch (e) {}
 }
@@ -1538,10 +1774,46 @@ function maybeRestoreFilesView() {
 }
 
 /* ---------- dashboard stats ---------- */
+function statDelta(el, cur, prev, goodWhenDown) {
+    if (!el) return;
+    cur = Number(cur) || 0;
+    prev = Number(prev) || 0;
+    const diff = cur - prev;
+    if (!cur && !prev) {
+        el.textContent = 'no data yet';
+        el.className = 'stat-delta flat';
+        return;
+    }
+    if (!diff) {
+        el.textContent = 'same as previous period';
+        el.className = 'stat-delta flat';
+        return;
+    }
+    const pct = prev > 0 ? ' (' + (diff > 0 ? '+' : '') + Math.round(diff / prev * 100) + '%)' : ' (new)';
+    el.textContent = (diff > 0 ? '+' : '') + diff.toLocaleString() + ' vs previous' + pct;
+    const good = goodWhenDown ? diff < 0 : diff > 0;
+    el.className = 'stat-delta ' + (good ? 'up' : 'down');
+}
+
+function jumpToLogs(q, status) {
+    const s = $('#logSearch');
+    if (s) s.value = q || '';
+    const bucket = !status ? '' : (status >= 500 ? '5xx' : (status >= 400 ? '4xx' : (status >= 200 ? '2xx' : '')));
+    const sel = $('#logStatus');
+    if (sel && bucket) {
+        sel.value = bucket;
+        if (cselRenders['logStatus']) cselRenders['logStatus']();
+    }
+    state.logPage = 1;
+    activateTab('logs');
+}
+
 async function loadStats() {
+    const range = state.statRange || '24h';
+    const daily = range !== '24h';
     let d;
     try {
-        d = await api('stats', { method: 'GET' });
+        d = await api('stats', { method: 'GET', params: { range } });
     } catch (err) { toast(err.message, 'err'); return; }
     $('#stUsers').textContent = d.users;
     $('#stBuckets').textContent = d.buckets;
@@ -1549,6 +1821,8 @@ async function loadStats() {
     $('#stSize').textContent = fmtBytes(d.size);
     $('#stRequests').textContent = d.requests.toLocaleString();
     $('#stAvgMs').textContent = d.avgMs.toLocaleString() + ' ms';
+    statDelta($('#stReqDelta'), d.winRequests, d.prevRequests, false);
+    statDelta($('#stErrDelta'), d.winErrors, d.prevErrors, true);
 
     const total = d.req2xx + d.req4xx + d.req5xx || 1;
     $('#bar2xx').style.width = (d.req2xx / total * 100).toFixed(1) + '%';
@@ -1560,13 +1834,16 @@ async function loadStats() {
 
     const chart = $('#chart24');
     chart.innerHTML = '';
+    $('#chartTitle').textContent = 'Requests last ' + (range === '7d' ? '7 days' : (range === '30d' ? '30 days' : '24 hours'));
     if (!d.h24.length) {
-        chart.innerHTML = '<div class="empty">' + icon('activity') + '<span>No requests in the last 24 hours.</span></div>';
+        chart.innerHTML = '<div class="empty">' + icon('activity') + '<span>No requests in this period.</span></div>';
     } else {
         const hourFmt = new Intl.DateTimeFormat(undefined, { hour: 'numeric' });
-        const tipFmt = new Intl.DateTimeFormat(undefined, { dateStyle: 'short', timeStyle: 'short' });
+        const dayFmt = new Intl.DateTimeFormat(undefined, { month: 'short', day: 'numeric' });
+        const tipFmt = new Intl.DateTimeFormat(undefined, { dateStyle: 'short', timeStyle: daily ? undefined : 'short' });
         const reqFmt = new Intl.NumberFormat(undefined);
         const max = Math.max(1, ...d.h24.map(h => h[1]));
+        const step = Math.max(1, Math.ceil(d.h24.length / 8));
         d.h24.forEach((h, i) => {
             const col = document.createElement('div');
             col.className = 'col';
@@ -1575,10 +1852,10 @@ async function loadStats() {
             bar.style.height = Math.round(h[1] / max * 100) + '%';
             bar.title = tipFmt.format(tsToDate(h[0])) + ' (' + reqFmt.format(h[1]) + ' request' + (h[1] === 1 ? '' : 's') + ')';
             col.appendChild(bar);
-            if (i % 4 === 0) {
+            if (i % step === 0) {
                 const lab = document.createElement('span');
                 lab.className = 'h';
-                lab.textContent = hourFmt.format(tsToDate(h[0]));
+                lab.textContent = daily ? dayFmt.format(tsToDate(h[0])) : hourFmt.format(tsToDate(h[0]));
                 col.appendChild(lab);
             }
             chart.appendChild(col);
@@ -1593,7 +1870,7 @@ async function loadStats() {
         const maxC = Math.max(1, ...d.topUsers.map(u => u.count));
         d.topUsers.forEach(u => {
             tu.insertAdjacentHTML('beforeend',
-                '<div class="tu-row"><span>' + esc(u.username) + '</span><div class="tu-bar"><div style="width:' + Math.round(u.count / maxC * 100) + '%"></div></div><span class="muted">' + u.count.toLocaleString() + '</span></div>');
+                '<div class="tu-row tu-click" data-username="' + esc(u.username) + '" title="Show in users"><span>' + esc(u.username) + '</span><div class="tu-bar"><div style="width:' + Math.round(u.count / maxC * 100) + '%"></div></div><span class="muted">' + u.count.toLocaleString() + '</span></div>');
         });
     }
 
@@ -1608,12 +1885,33 @@ async function loadStats() {
                 '<div class="ra-row"><span class="st ' + sClass + '">' + Number(r.status) + '</span>' +
                 '<code>' + esc(r.method || '') + '</code>' +
                 '<span class="ra-uri" title="' + esc(r.uri || '') + '">' + esc(r.uri || '') + '</span>' +
-                '<span class="muted">' + esc(r.username || (r.kind === 'admin' ? 'admin' : '-')) + '</span></div>');
+                '<span class="muted">' + esc(r.username || (r.kind === 'admin' ? 'admin' : '-')) + '</span>' +
+                '<button class="icon-btn sm logjump" data-q="' + esc(r.uri || '') + '" data-status="' + Number(r.status) + '" title="View in logs" aria-label="View in logs">' + icon('search', 14) + '</button></div>');
         });
     }
 }
 
 $('#refreshStatsBtn').addEventListener('click', loadStats);
+
+$$('.stat-card[data-goto]').forEach(c => c.addEventListener('click', () => activateTab(c.dataset.goto)));
+$$('.segmented [data-range]').forEach(b => b.addEventListener('click', () => {
+    state.statRange = b.dataset.range;
+    $$('.segmented [data-range]').forEach(x => x.classList.toggle('active', x === b));
+    loadStats();
+}));
+$('#topUsers').addEventListener('click', e => {
+    const row = e.target.closest('.tu-click');
+    if (!row) return;
+    state.userQ = row.dataset.username;
+    const s = $('#userSearch');
+    if (s) s.value = state.userQ;
+    activateTab('users');
+});
+$('#recentActivity').addEventListener('click', e => {
+    const btn = e.target.closest('.logjump');
+    if (!btn) return;
+    jumpToLogs(btn.dataset.q, Number(btn.dataset.status));
+});
 
 /* ---------- users ---------- */
 async function loadUsers() {
@@ -1632,7 +1930,230 @@ function populateUserSelects() {
     $('#logUser').innerHTML = opts;
     if (cselRenders['bucketUserSelect']) cselRenders['bucketUserSelect']();
     if (cselRenders['logUser']) cselRenders['logUser']();
+    const cu = $('#connectUser');
+    if (cu) {
+        const prev = cu.value;
+        cu.innerHTML = state.users.map(u => '<option value="' + u.id + '">' + esc(u.username) + (Number(u.disabled) ? ' (disabled)' : '') + '</option>').join('');
+        if (prev && state.users.some(u => String(u.id) === String(prev))) cu.value = prev;
+        renderConnect();
+    }
 }
+
+/* ---------- settings: connect / backup / sessions ---------- */
+function renderConnect() {
+    const sel = $('#connectUser');
+    if (!sel) return;
+    const u = state.users.find(x => String(x.id) === String(sel.value)) || state.users[0];
+    if (!u) {
+        $('#connectEndpoint').value = '';
+        $('#connectCli').textContent = 'Create an S3 user first.';
+        return;
+    }
+    if (!sel.value) sel.value = u.id;
+    const origin = location.origin;
+    const profile = 'minis3-' + u.username;
+    $('#connectEndpoint').value = origin;
+    const cli = 'aws configure set aws_access_key_id ' + u.access_key + ' --profile ' + profile + '\n' +
+        'aws configure set aws_secret_access_key ' + u.secret_key + ' --profile ' + profile + '\n' +
+        'aws configure set region us-east-1 --profile ' + profile + '\n' +
+        'aws --profile ' + profile + ' --endpoint-url ' + origin + ' s3 ls';
+    const rclone = '[' + profile + ']\ntype = s3\nprovider = Other\nendpoint = ' + origin +
+        '\naccess_key_id = ' + u.access_key + '\nsecret_access_key = ' + u.secret_key + '\nregion = us-east-1';
+    $('#connectCli').textContent = cli;
+    $('#connectCopyCli').onclick = () => copyText(cli);
+    $('#connectCopyRclone').onclick = () => copyText(rclone);
+}
+$('#connectUser').addEventListener('change', renderConnect);
+$('#connectEndpoint').addEventListener('click', e => e.target.select());
+
+$('#backupExportBtn').addEventListener('click', () => {
+    window.open('api.php?action=backup_export', '_blank', 'noopener');
+});
+$('#backupImportBtn').addEventListener('click', () => $('#backupInput').click());
+$('#backupInput').addEventListener('change', async () => {
+    const f = $('#backupInput').files[0];
+    $('#backupInput').value = '';
+    if (!f) return;
+    const err = $('#backupError');
+    err.classList.add('hidden');
+    let text = '';
+    try {
+        text = await f.text();
+        JSON.parse(text);
+    } catch (e) {
+        err.textContent = 'That file is not valid JSON.';
+        err.classList.remove('hidden');
+        return;
+    }
+    try {
+        const d = await api('backup_import', { json: JSON.parse(text) });
+        toast('Import done: ' + d.users_created + ' user(s), ' + d.buckets_created + ' bucket(s), ' + d.skipped + ' skipped', 'ok');
+        await loadUsers();
+    } catch (e) { toast(e.message, 'err'); }
+}
+);
+
+$('#revokeSessionsBtn').addEventListener('click', () => {
+    confirmDialog('Sign out all other browsers and devices? This session stays signed in.', 'Revoke others', async () => {
+        try {
+            await api('revoke_sessions', { form: new URLSearchParams() });
+            toast('All other sessions revoked', 'ok');
+        } catch (err) { toast(err.message, 'err'); }
+    });
+});
+
+/* ---------- command palette (Ctrl+K) ---------- */
+let palItems = [];
+let palSel = 0;
+
+function refreshCurrent() {
+    if (!$('#tab-stats').classList.contains('hidden')) loadStats();
+    else if (!$('#tab-users').classList.contains('hidden')) loadUsers();
+    else if (!$('#tab-buckets').classList.contains('hidden')) (state.bucketId ? loadFiles() : loadBuckets());
+    else if (!$('#tab-logs').classList.contains('hidden')) loadLogs();
+    else if (!$('#tab-trash').classList.contains('hidden')) loadTrash();
+}
+
+function paletteCommands(q) {
+    const cmds = [
+        { ic: 'grid', t: 'Go to Dashboard', run: () => activateTab('stats') },
+        { ic: 'users', t: 'Go to Users', run: () => activateTab('users') },
+        { ic: 'hard-drive', t: 'Go to Buckets', run: () => activateTab('buckets') },
+        { ic: 'file-text', t: 'Go to Logs', run: () => activateTab('logs') },
+        { ic: 'trash', t: 'Go to Trash', run: () => activateTab('trash') },
+        { ic: 'sliders', t: 'Go to Settings', run: () => activateTab('settings') },
+        { ic: 'refresh', t: 'Refresh current view', run: refreshCurrent },
+        { ic: 'user-plus', t: 'Add user', run: () => { activateTab('users'); setTimeout(() => $('#addUserBtn').click(), 60); } },
+        { ic: 'plus', t: 'Add bucket', run: () => { activateTab('buckets'); setTimeout(() => $('#addBucketBtn').click(), 60); } },
+        { ic: 'upload', t: 'Upload files', run: () => {
+            if (state.bucketId && !$('#filesView').classList.contains('hidden')) $('#uploadFileBtn').click();
+            else toast('Open a bucket first', 'err');
+        } },
+        { ic: 'download', t: 'Export logs as CSV', run: () => $('#exportLogsBtn').click() },
+        { ic: 'moon', t: 'Toggle dark / light theme', run: () => $('#themeBtn').click() },
+    ];
+    if (!q) return cmds.map(c => ({ ...c, sec: 'Commands' }));
+    q = q.toLowerCase();
+    return cmds.filter(c => c.t.toLowerCase().includes(q)).map(c => ({ ...c, sec: 'Commands' }));
+}
+
+function renderPalette() {
+    const list = $('#paletteList');
+    list.innerHTML = '';
+    if (!palItems.length) {
+        list.innerHTML = '<div class="pal-empty">No matches. Try a username, bucket or object key.</div>';
+        return;
+    }
+    let lastSec = '';
+    palItems.forEach((it, i) => {
+        if (it.sec !== lastSec) {
+            lastSec = it.sec;
+            list.insertAdjacentHTML('beforeend', '<div class="pal-sec">' + esc(it.sec) + '</div>');
+        }
+        list.insertAdjacentHTML('beforeend',
+            '<button class="pal-item' + (i === palSel ? ' sel' : '') + '" data-pi="' + i + '">' +
+            '<span class="ficon">' + icon(it.ic || 'info', 18) + '</span>' +
+            '<span class="pt">' + esc(it.t) + '</span>' +
+            (it.sub ? '<span class="ps">' + esc(it.sub) + '</span>' : '') +
+            '</button>');
+    });
+    const sel = list.querySelector('[data-pi="' + palSel + '"]');
+    if (sel) sel.scrollIntoView({ block: 'nearest' });
+}
+
+async function paletteSearch(q) {
+    palItems = paletteCommands(q);
+    palSel = 0;
+    renderPalette();
+    if (q.trim().length < 2) return;
+    let d;
+    try {
+        d = await api('search_all', { method: 'GET', params: { q: q.trim() } });
+    } catch (e) { return; }
+    if ($('#paletteInput').value.trim() !== q.trim() || $('#paletteOverlay').classList.contains('hidden')) return;
+    const items = [...palItems];
+    (d.users || []).forEach(u => items.push({ ic: 'user', sec: 'Users', t: u.username, sub: 'S3 user', run: () => {
+        state.userQ = u.username;
+        const s = $('#userSearch');
+        if (s) s.value = u.username;
+        activateTab('users');
+    } }));
+    (d.buckets || []).forEach(b => items.push({ ic: 'hard-drive', sec: 'Buckets', t: b.username + ' / ' + b.name, sub: 'Bucket', run: async () => {
+        activateTab('buckets');
+        await loadBuckets();
+        openBucket(Number(b.id), '');
+    } }));
+    (d.objects || []).forEach(o => items.push({ ic: 'file', sec: 'Objects', t: o.key, sub: o.username + ' / ' + o.bucket, run: async () => {
+        activateTab('buckets');
+        await loadBuckets();
+        const cut = String(o.key).lastIndexOf('/');
+        openBucket(Number(o.bucket_id), cut >= 0 ? String(o.key).slice(0, cut + 1) : '');
+    } }));
+    palItems = items;
+    palSel = 0;
+    renderPalette();
+}
+
+function openPalette() {
+    if ($('#appBox').classList.contains('hidden')) return;
+    $('#paletteOverlay').classList.remove('hidden');
+    $('#paletteInput').value = '';
+    paletteSearch('');
+    setTimeout(() => $('#paletteInput').focus(), 30);
+}
+function closePalette() {
+    $('#paletteOverlay').classList.add('hidden');
+    clearTimeout(state._palT);
+}
+$('#paletteBtn').addEventListener('click', () => {
+    if ($('#paletteOverlay').classList.contains('hidden')) openPalette();
+    else closePalette();
+});
+$('#paletteOverlay').addEventListener('click', e => {
+    if (e.target === $('#paletteOverlay')) closePalette();
+});
+$('#paletteInput').addEventListener('input', e => {
+    clearTimeout(state._palT);
+    const q = e.target.value;
+    palItems = paletteCommands(q);
+    palSel = 0;
+    renderPalette();
+    if (q.trim().length >= 2) {
+        state._palT = setTimeout(() => paletteSearch(q), 250);
+    }
+});
+$('#paletteInput').addEventListener('keydown', e => {
+    if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+        e.preventDefault();
+        if (!palItems.length) return;
+        palSel = (palSel + (e.key === 'ArrowDown' ? 1 : palItems.length - 1)) % palItems.length;
+        renderPalette();
+    } else if (e.key === 'Enter') {
+        e.preventDefault();
+        const it = palItems[palSel];
+        if (!it) return;
+        closePalette();
+        it.run();
+    } else if (e.key === 'Escape') {
+        closePalette();
+    }
+});
+$('#paletteList').addEventListener('click', e => {
+    const b = e.target.closest('[data-pi]');
+    if (!b) return;
+    const it = palItems[Number(b.dataset.pi)];
+    if (!it) return;
+    closePalette();
+    it.run();
+});
+document.addEventListener('keydown', e => {
+    if ((e.ctrlKey || e.metaKey) && String(e.key).toLowerCase() === 'k') {
+        e.preventDefault();
+        if ($('#appBox').classList.contains('hidden')) return;
+        if ($('#paletteOverlay').classList.contains('hidden')) openPalette();
+        else closePalette();
+    }
+});
 
 function sparkline(counts, w, h) {
     const max = Math.max(1, ...counts);
@@ -1665,6 +2186,7 @@ function applySortMarks(section, sortState) {
 const USER_SORT_COLS = {
     username: u => u.username,
     storage_used: u => Number(u.storage_used || 0),
+    last_active: u => String(u.last_active || ''),
     created_at: u => String(u.created_at || ''),
 };
 
@@ -1672,11 +2194,13 @@ function renderUsers() {
     const tb = $('#usersTbody');
     tb.innerHTML = '';
     applySortMarks('#tab-users', state.userSort);
-    if (!state.users.length) {
-        tb.innerHTML = '<tr><td colspan="6"><div class="empty">' + icon('users') + '<span>No users yet.</span></div></td></tr>';
+    const q = (state.userQ || '').toLowerCase();
+    const rows = sortRows(state.users.filter(u => !q || u.username.toLowerCase().includes(q) || String(u.access_key).toLowerCase().includes(q)), state.userSort, USER_SORT_COLS);
+    if (!rows.length) {
+        tb.innerHTML = '<tr><td colspan="7"><div class="empty">' + icon('users') + '<span>' + (state.users.length ? 'No users match the search.' : 'No users yet.') + '</span></div></td></tr>';
         return;
     }
-    for (const u of sortRows(state.users, state.userSort, USER_SORT_COLS)) {
+    for (const u of rows) {
         const tr = document.createElement('tr');
         const quota = Number(u.quota_bytes || 0);
         const used = Number(u.storage_used || 0);
@@ -1692,16 +2216,19 @@ function renderUsers() {
             storageHtml += '<div title="S3 requests, last 14 days">' + sparkline(u.usage14, 64, 18) + '</div>';
         }
         tr.innerHTML =
-            '<td><span class="cellname"><span class="ficon" style="color:var(--primary)">' + icon('user', 20) + '</span><strong class="nm">' + esc(u.username) + '</strong></span></td>' +
+            '<td><span class="cellname"><span class="ficon" style="color:var(--primary)">' + icon('user', 20) + '</span><strong class="nm">' + esc(u.username) + '</strong>' + (Number(u.disabled) ? ' <span class="st st-off">off</span>' : '') + '</span></td>' +
             '<td><code>' + esc(u.access_key) + '</code></td>' +
             '<td><code>' + esc(maskKey(u.secret_key)) + '</code></td>' +
             '<td title="' + esc(meta) + '">' + storageHtml + '</td>' +
+            '<td class="muted" title="' + esc(u.last_active ? fmtTime(u.last_active) : '') + '">' + esc(u.last_active ? fmtRel(u.last_active) : '—') + '</td>' +
             '<td class="muted" title="' + esc(fmtTime(u.created_at)) + '">' + esc(fmtRel(u.created_at)) + '</td>' +
             '<td class="actions">' +
             '<button data-act="show" data-id="' + u.id + '" class="btn btn-tonal btn-sm"><span class="bi">' + icon('key', 16) + '</span>Keys</button>' +
             '<button data-act="edit" data-id="' + u.id + '" class="btn btn-outlined btn-sm"><span class="bi">' + icon('edit', 16) + '</span>Edit</button>' +
+            '<button data-act="toggle" data-id="' + u.id + '" class="btn btn-sm ' + (Number(u.disabled) ? 'btn-ok' : 'btn-tonal') + '">' + (Number(u.disabled) ? 'Enable' : 'Disable') + '</button>' +
             '<button data-act="delete" data-id="' + u.id + '" class="btn btn-danger btn-sm"><span class="bi">' + icon('trash', 16) + '</span>Delete</button>' +
             '</td>';
+        if (Number(u.disabled)) tr.classList.add('off');
         tb.appendChild(tr);
     }
 }
@@ -1712,8 +2239,36 @@ $('#usersTbody').addEventListener('click', e => {
     const id = Number(btn.dataset.id);
     if (btn.dataset.act === 'show') showKeys(id);
     if (btn.dataset.act === 'edit') openEditUser(id);
+    if (btn.dataset.act === 'toggle') toggleUser(id);
     if (btn.dataset.act === 'delete') deleteUser(id);
 });
+
+$('#userSearch').addEventListener('input', e => {
+    state.userQ = e.target.value.trim();
+    renderUsers();
+});
+
+async function toggleUser(id) {
+    const u = state.users.find(x => x.id === id);
+    if (!u) return;
+    const disabling = !Number(u.disabled);
+    const go = async () => {
+        const fd = new FormData();
+        fd.append('id', id);
+        fd.append('_sub', 'update');
+        fd.append('disabled', disabling ? '1' : '0');
+        try {
+            await api('users', { form: fd });
+            await loadUsers();
+            toast(disabling ? 'User disabled - S3 access blocked' : 'User enabled', 'ok');
+        } catch (err) { toast(err.message, 'err'); }
+    };
+    if (disabling) {
+        confirmDialog('Disable user "' + u.username + '"? Their S3 access keys stop working immediately. Buckets and files are kept.', 'Disable', go);
+    } else {
+        go();
+    }
+}
 
 $$('#tab-users .sortbtn').forEach(b => b.addEventListener('click', () => {
     const c = b.dataset.usort;
@@ -1730,12 +2285,27 @@ function showKeys(idOrUser) {
     if (!u) return;
     openModal(
         '<h3>Keys for ' + esc(u.username) + '</h3>' +
-        '<div class="tf"><input readonly value="' + esc(u.access_key) + '" placeholder=" "><label>Access key</label></div>' +
-        '<div class="tf"><input readonly value="' + esc(u.secret_key) + '" placeholder=" "><label>Secret key</label></div>' +
+        '<div class="keyrow"><div class="tf"><input id="keyAkInput" readonly value="' + esc(u.access_key) + '" placeholder=" "><label>Access key</label></div>' +
+        '<button id="copyAkBtn" class="icon-btn" title="Copy access key" aria-label="Copy access key">' + icon('copy', 18) + '</button></div>' +
+        '<div class="keyrow"><div class="tf"><input id="keySkInput" type="password" readonly value="' + esc(u.secret_key) + '" placeholder=" " autocomplete="off"><label>Secret key</label></div>' +
+        '<button id="revealSkBtn" class="icon-btn" title="Show secret key" aria-label="Show secret key">' + icon('eye', 18) + '</button>' +
+        '<button id="copySkBtn" class="icon-btn" title="Copy secret key" aria-label="Copy secret key">' + icon('copy', 18) + '</button></div>' +
         '<div class="modal-actions">' +
         '<button id="copyBothBtn" class="btn btn-filled"><span class="bi">' + icon('copy', 16) + '</span>Copy both</button>' +
         '<button class="btn btn-text" data-close>Done</button>' +
         '</div>');
+    $('#keyAkInput').addEventListener('click', e => e.target.select());
+    $('#keySkInput').addEventListener('click', e => e.target.select());
+    $('#revealSkBtn').onclick = () => {
+        const inp = $('#keySkInput');
+        const show = inp.type === 'password';
+        inp.type = show ? 'text' : 'password';
+        $('#revealSkBtn').setAttribute('title', show ? 'Hide secret key' : 'Show secret key');
+        $('#revealSkBtn').setAttribute('aria-label', show ? 'Hide secret key' : 'Show secret key');
+        $('#revealSkBtn').classList.toggle('on', show);
+    };
+    $('#copyAkBtn').onclick = () => copyText(u.access_key);
+    $('#copySkBtn').onclick = () => copyText(u.secret_key);
     $('#copyBothBtn').onclick = () => copyText(u.access_key + '\n' + u.secret_key);
 }
 
@@ -1833,6 +2403,7 @@ const BUCKET_SORT_COLS = {
     name: b => b.name,
     username: b => b.username,
     object_count: b => Number(b.object_count || 0),
+    size: b => Number(b.size || 0),
     created_at: b => String(b.created_at || ''),
 };
 
@@ -1841,7 +2412,7 @@ function renderBuckets() {
     tb.innerHTML = '';
     applySortMarks('#tab-buckets', state.bucketSort);
     if (!state.buckets.length) {
-        tb.innerHTML = '<tr><td colspan="5"><div class="empty">' + icon('hard-drive') + '<span>No buckets yet.</span></div></td></tr>';
+        tb.innerHTML = '<tr><td colspan="6"><div class="empty">' + icon('hard-drive') + '<span>No buckets yet.</span></div></td></tr>';
         return;
     }
     for (const b of sortRows(state.buckets, state.bucketSort, BUCKET_SORT_COLS)) {
@@ -1850,6 +2421,7 @@ function renderBuckets() {
             '<td><span class="cellname"><span class="ficon" style="color:var(--primary)">' + icon('hard-drive', 20) + '</span><strong class="nm">' + esc(b.name) + '</strong></span></td>' +
             '<td class="muted">' + esc(b.username) + '</td>' +
             '<td>' + Number(b.object_count).toLocaleString() + '</td>' +
+            '<td title="' + Number(b.object_count).toLocaleString() + ' objects">' + esc(fmtBytes(b.size || 0)) + '</td>' +
             '<td class="muted" title="' + esc(fmtTime(b.created_at)) + '">' + esc(fmtRel(b.created_at)) + '</td>' +
             '<td class="actions">' +
             '<button data-act="open" data-id="' + b.id + '" class="btn btn-tonal btn-sm"><span class="bi">' + icon('folder', 16) + '</span>Open</button>' +
@@ -1932,17 +2504,30 @@ function renameBucket(id) {
 async function deleteBucket(id) {
     const b = state.buckets.find(x => x.id === id);
     if (!b) return;
-    confirmDialog('Delete bucket "' + b.name + '" and ALL files inside it? This cannot be undone.', 'Delete', async () => {
+    openModal(
+        '<h3>Delete bucket</h3>' +
+        '<p>Permanently delete bucket <code>' + esc(b.name) + '</code> (' + Number(b.object_count).toLocaleString() + ' objects, ' + esc(fmtBytes(b.size || 0)) + ') and ALL files inside it? This cannot be undone.</p>' +
+        '<form id="delBucketForm">' +
+        '<div class="tf"><input id="delBucketName" placeholder=" " autocomplete="off"><label>Type "' + esc(b.name) + '" to confirm</label></div>' +
+        '<div class="modal-actions"><button type="submit" id="delBucketGo" class="btn btn-danger" disabled>Delete</button><button type="button" class="btn btn-text" data-close>Cancel</button></div>' +
+        '</form>');
+    $('#delBucketName').addEventListener('input', e => {
+        $('#delBucketGo').disabled = e.target.value.trim() !== b.name;
+    });
+    $('#delBucketForm').onsubmit = async ev => {
+        ev.preventDefault();
+        if ($('#delBucketName').value.trim() !== b.name) return;
         const fd = new FormData();
         fd.append('id', id);
         fd.append('_sub', 'delete');
         try {
             await api('buckets', { form: fd });
+            closeModal();
             if (Number(id) === Number(state.bucketId)) clearFilesView();
             await loadBuckets();
             toast('Bucket deleted', 'ok');
         } catch (err) { toast(err.message, 'err'); }
-    });
+    };
 }
 
 function openBucket(id, prefix) {
@@ -2964,7 +3549,7 @@ async function loadLogs() {
         state.logs.forEach(r => {
             const sClass = r.status >= 500 ? 'st5' : (r.status >= 400 ? 'st4' : 'st2');
             const tr = document.createElement('tr');
-            tr.className = 'logrow';
+            tr.className = 'logrow' + (Number(r.ms) > 1000 ? ' slow' : '');
             tr.dataset.id = r.id;
             tr.innerHTML =
                 '<td class="muted">' + esc(fmtTime(r.ts)) + '</td>' +
@@ -2979,7 +3564,7 @@ async function loadLogs() {
         });
     }
     renderPager('logPager', state.logPage, state.logPages, state.logPerPage,
-        p => { state.logPage = p; loadLogs(); },
+        p => { setTail(false); state.logPage = p; loadLogs(); },
         n => { state.logPerPage = n; state.logPage = 1; loadLogs(); });
 }
 
@@ -3008,6 +3593,35 @@ $('#logsTbody').addEventListener('click', e => {
 });
 
 $('#refreshLogsBtn').addEventListener('click', loadLogs);
+
+function setTail(on) {
+    state.tailOn = !!on;
+    $('#tailLogsBtn').classList.toggle('on', !!on);
+    $('#tailLogsBtn').title = on ? 'Live tail on - click to pause' : 'Live tail (refresh every 5s)';
+    clearInterval(state._tailT);
+    if (on) {
+        state._tailT = setInterval(() => {
+            if (document.hidden || $('#tab-logs').classList.contains('hidden') || !$('#modalOverlay').classList.contains('hidden')) return;
+            if (state.logPage !== 1) { setTail(false); return; }
+            loadLogs();
+        }, 5000);
+    }
+}
+$('#tailLogsBtn').addEventListener('click', () => {
+    if (!state.tailOn) { state.logPage = 1; loadLogs(); }
+    setTail(!state.tailOn);
+});
+document.addEventListener('visibilitychange', () => { if (document.hidden && state.tailOn) loadLogs(); });
+
+$('#exportLogsBtn').addEventListener('click', () => {
+    const p = new URLSearchParams();
+    if ($('#logUser').value) p.set('user_id', $('#logUser').value);
+    if ($('#logKind').value) p.set('kind', $('#logKind').value);
+    if ($('#logMethod').value) p.set('method', $('#logMethod').value);
+    if ($('#logStatus').value) p.set('status', $('#logStatus').value);
+    if ($('#logSearch').value.trim()) p.set('q', $('#logSearch').value.trim());
+    window.open('api.php?action=logs_export&' + p.toString(), '_blank', 'noopener');
+});
 $('#logUser').addEventListener('change', () => { state.logPage = 1; loadLogs(); });
 $('#logKind').addEventListener('change', () => { state.logPage = 1; loadLogs(); });
 $('#logMethod').addEventListener('change', () => { state.logPage = 1; loadLogs(); });
@@ -3054,13 +3668,15 @@ async function loadTrash() {
     } else {
         state.trash.forEach(r => {
             const tr = document.createElement('tr');
+            const msLeft = new Date(String(r.expires_at).replace(' ', 'T') + 'Z').getTime() - Date.now();
+            const dueSoon = msLeft < 24 * 3600 * 1000;
             tr.innerHTML =
                 '<td><span class="cellname">' + fileIcon(r.key) + '<span class="nm" title="' + esc(r.key) + '">' + esc(r.key) + '</span></span></td>' +
                 '<td class="muted">' + esc(r.bucket_name) + '</td>' +
                 '<td class="muted">' + esc(r.username) + '</td>' +
                 '<td class="muted">' + esc(fmtBytes(r.size)) + '</td>' +
                 '<td class="muted" title="' + esc(fmtTime(r.deleted_at)) + '">' + esc(fmtRel(r.deleted_at)) + '</td>' +
-                '<td class="muted" title="' + esc(fmtTime(r.expires_at)) + '">' + esc(fmtRel(r.expires_at).replace(' ago', '')) + '</td>' +
+                '<td title="' + esc(fmtTime(r.expires_at)) + '"><span class="st ' + (dueSoon ? 'st4' : 'st2') + '">' + esc(fmtRel(r.expires_at).replace(' ago', '')) + '</span></td>' +
                 '<td class="actions">' +
                 '<button data-tact="restore" data-id="' + r.id + '" class="btn btn-tonal btn-sm"><span class="bi">' + icon('refresh', 15) + '</span>Restore</button>' +
                 '<button data-tact="purge" data-id="' + r.id + '" class="btn btn-danger btn-sm"><span class="bi">' + icon('trash', 15) + '</span></button>' +
@@ -3083,13 +3699,24 @@ $('#trashTbody').addEventListener('click', e => {
     if (!row) return;
     const act = btn.dataset.tact;
     if (act === 'restore') {
-        (async () => {
+        openModal(
+            '<h3>Restore object</h3>' +
+            '<table class="grid"><tbody>' +
+            '<tr><td>Original path</td><td><code style="overflow-wrap:anywhere">' + esc(row.username + ' / ' + row.bucket_name + ' / ' + row.key) + '</code></td></tr>' +
+            '<tr><td>Size</td><td>' + esc(fmtBytes(row.size)) + '</td></tr>' +
+            '<tr><td>Deleted</td><td>' + esc(fmtTime(row.deleted_at)) + ' (' + esc(fmtRel(row.deleted_at)) + ')</td></tr>' +
+            '<tr><td>Auto-purge</td><td>' + esc(fmtTime(row.expires_at)) + ' (' + esc(fmtRel(row.expires_at).replace(' ago', '')) + ' left)</td></tr>' +
+            '</tbody></table>' +
+            '<p class="muted">Restore fails if the user or bucket no longer exists, or if a file already occupies the original path.</p>' +
+            '<div class="modal-actions"><button id="trashRestoreGo" class="btn btn-filled">Restore</button><button class="btn btn-text" data-close>Cancel</button></div>');
+        $('#trashRestoreGo').onclick = async () => {
             try {
                 await api('trash', { form: new URLSearchParams({ _sub: 'restore', id }) });
+                closeModal();
                 toast('Restored ' + row.key, 'ok');
                 await loadTrash();
             } catch (err) { toast(err.message, 'err'); }
-        })();
+        };
     }
     if (act === 'purge') {
         confirmDialog('Permanently delete "' + row.key + '"? This cannot be undone.', 'Delete', async () => {

@@ -38,7 +38,7 @@ Upload the **contents of the `minis3/` folder** into that `public_html/`
 
 - `index.php`, `install.php`, `reset.php`, `config.php`, `.htaccess`, `router.php`
 - `admin/` (index.php, api.php)
-- `lib/` (util.php, db.php, log.php, auth.php, s3.php)
+- `lib/` (util.php, db.php, log.php, auth.php, s3.php, webauthn.php)
 - `data/` (can be empty)
 - `tools/` (optional - contains `reset-admin.php`, the CLI password reset
   tool; it is web-denied by `.htaccess` and refuses to run from a browser)
@@ -66,7 +66,7 @@ public_html/
 
 1. **Domain Setup** -> select the domain -> **Select PHP Version**
    (or the CloudLinux PHP Selector / custombuild PHP version).
-2. Choose **PHP 8.1 or 8.2**.
+2. Choose **PHP 8.2 or newer**.
 3. Required extensions: `pdo_sqlite`, `sqlite3` - these are bundled in every
    DirectAdmin PHP build and are enabled by default. You can verify by opening
    `https://s3.yourdomain.com/admin/index.php` and, if it fails, checking with
@@ -75,14 +75,15 @@ public_html/
 ## 4. Install
 
 1. Open `https://s3.yourdomain.com/install.php` in a browser.
-2. Set the admin password (at least 8 chars), submit.
-3. **Delete `install.php` from the server** (critical - otherwise anyone who
-   finds it can reset your admin password if the database is ever wiped).
+2. Set the admin username and password (at least 8 chars), submit.
+3. **Delete `install.php` from the server** (critical - while it exists,
+   anyone who finds it can reach the installer page).
 
 ## 5. First login and test
 
 1. Open `https://s3.yourdomain.com/admin/` and sign in.
-2. **Users** tab -> **+ Add user** -> note the access key and secret key.
+2. **Users** tab -> **+ Add user** -> note the access key and secret key
+   (per-key copy buttons; the secret is masked until revealed).
 3. **Buckets** tab -> create a bucket for that user.
 4. Test with an S3 client:
 
@@ -204,6 +205,9 @@ https://s3.yourdomain.com/config.php
   ```
   php -r '$db = new PDO("sqlite:data/app.sqlite"); $db->exec("PRAGMA wal_checkpoint(TRUNCATE);");'
   ```
+- For users/buckets/settings metadata only (no object data), the admin
+  panel's **Settings -> Backup** exports a JSON file that can be re-imported
+  on another install.
 
 ## 8. Troubleshooting
 
@@ -211,13 +215,13 @@ https://s3.yourdomain.com/config.php
 |---|---|
 | `install.php` shows an S3 XML `AccessDenied` error | The installer is being rewritten to `index.php` (S3 API) - the bundled `.htaccess` line `RewriteRule ^(index|install)\.php$ - [L]` is missing or overridden; re-upload the current `.htaccess` |
 | `/admin/` returns 403 / doesn't render | `.htaccess` missing or `AllowOverride` off; re-upload the file, ask the host to enable `AllowOverride All` |
-| `install.php` -> 500 | PHP < 7.4 or `pdo_sqlite` missing; switch to PHP 8.1/8.2 |
-| `SignatureDoesNotMatch` in WinSCP/aws cli | Keys differ from what the server has - re-copy them from the admin panel (Users -> Show). Check server clock (skew limit is 15 min, `MAX_SKEW` in config.php) |
+| `install.php` -> 500 | PHP < 7.4 or `pdo_sqlite` missing; switch to PHP 8.2+ |
+| `SignatureDoesNotMatch` in WinSCP/aws cli | Keys differ from what the server has - re-copy them from the admin panel (Users -> Keys, per-key copy buttons). Check server clock (skew limit is 15 min, `MAX_SKEW` in config.php) |
 | WinSCP: `SSL handshake failed` / certificate error | Server has no valid cert for the hostname. Issue Let's Encrypt in **SSL Certificates** (section 1) and connect to the exact hostname on the cert; or set WinSCP Encryption to "No encryption" (not recommended) |
 | WinSCP: `Connection reset` on TLS | Some hosts proxy TLS via an nginx/LiteSpeed layer with a stale cert - re-issue the cert for the domain, use port 443, and clear WinSCP's cached cert for the host |
 | `AccessDenied` with `x-amz-date` error | Client is not sending `x-amz-date`; use a real S3 client (WinSCP S3, rclone, aws cli) |
 | Big upload stalls / times out | Raise PHP time limits (section 6); check `max_execution_time`, and `set_time_limit` being disabled via `disable_functions` |
-| Bucket named `admin` (or `data`, `lib`, `tests`, `tools`, `index.php`, `install.php`, `reset.php`) unreachable | Those names are reserved by the app's routing / file serving - rename the bucket |
+| Bucket named `admin` (or `data`, `lib`, `tests`, `tools`, `config.php`, `index.php`, `install.php`, `reset.php`) unreachable | Those names are reserved by the app's routing / file serving - rename the bucket |
 | Admin panel works but S3 API returns HTML | Apache rewriting is off; `.htaccess` `RewriteRule ^ index.php` is what routes S3 requests |
 | 403 on everything from a new client | Client used signature v2, or virtual-host style URLs (bucket.yourdomain.com); path-style + SigV4 is required |
 | Forgot the admin username / password | If you have shell access: `php tools/reset-admin.php` in `public_html/` (it also clears two-factor authentication). Without shell access: create an empty file `data/reset.enabled` via FTP / File Manager, open `https://s3.yourdomain.com/reset.php` in a browser and set a new username/password - the marker is deleted automatically when done |
@@ -231,8 +235,11 @@ https://s3.yourdomain.com/config.php
 - [ ] HTTPS enabled (Let's Encrypt); SigV4 sends the secret-derived signature
       in every request - plain HTTP lets anyone capture and replay it
 - [ ] `data/` verified not web-accessible (section 6)
-- [ ] Strong admin password, changed from the default
+- [ ] Strong unique admin password (set at install; no default exists)
+- [ ] Admin 2FA and/or passkey enabled if the panel is exposed; use
+      **Settings -> Sessions -> Revoke others** after any incident
 - [ ] Secret keys only shared with the people who need them; regenerate in
-      the admin panel if one leaks
+      the admin panel if one leaks (or **Disable** the user to block its keys
+      instantly while keeping its data)
 - [ ] Logs tab: consider disabling admin/S3 request logging in **Settings**
       if the log table grows too fast
