@@ -378,6 +378,13 @@ input[type="checkbox"].rowcheck{width:18px;height:18px;cursor:pointer;accent-col
 .csel-item .chk{width:18px;color:var(--primary);visibility:hidden}
 .csel-item.sel{background:var(--secondary-container);color:var(--on-secondary-container);font-weight:600}
 .csel-item.sel .chk{visibility:visible}
+/* upgraded selects inside modals, floating-label fields and pagers */
+#modalBox .csel{width:100%;max-width:none}
+.tf.float.upgraded>label{position:static;display:block;font-size:.78rem;color:var(--on-surface-var);margin-bottom:6px}
+.tf.float.upgraded>.tf-caret{display:none}
+.tf.float.upgraded{margin:10px 0}
+.pager .csel{min-width:130px;max-width:170px}
+.pager .csel-btn{padding:7px 12px;font-size:12.5px}
 
 /* ============ folder picker ============ */
 .folder-picker{border:1px solid var(--outline-var);border-radius:12px;overflow:hidden;margin:10px 0;background:var(--surface-1)}
@@ -1146,6 +1153,8 @@ body{font-size:13.5px}
           <div class="tf"><input id="connectRegion" readonly value="us-east-1" placeholder=" "><label>Region</label></div>
           <p style="margin:12px 0 6px">AWS CLI</p>
           <pre id="connectCli" class="connect-pre"></pre>
+          <p style="margin:12px 0 6px">rclone</p>
+          <pre id="connectRclone" class="connect-pre"></pre>
           <div class="modal-actions" style="justify-content:flex-start">
             <button id="connectCopyCli" class="btn btn-tonal btn-sm"><span class="bi" data-icon="copy"></span>Copy AWS CLI config</button>
             <button id="connectCopyRclone" class="btn btn-tonal btn-sm"><span class="bi" data-icon="copy"></span>Copy rclone remote</button>
@@ -1549,9 +1558,12 @@ $('#themeBtn').addEventListener('click', () => applyTheme((document.documentElem
 
 /* ---------- custom dropdown (M3 menu style) ---------- */
 const cselRenders = {};
-function upgradeSelect(id) {
-    const sel = $('#' + id);
-    if (!sel) return;
+function upgradeSelect(idOrEl) {
+    const sel = typeof idOrEl === 'string' ? $('#' + idOrEl) : idOrEl;
+    if (!sel || sel.dataset.cselUp) return;
+    sel.dataset.cselUp = '1';
+    const tf = sel.closest('.tf.float');
+    if (tf) tf.classList.add('upgraded');
     const wrap = document.createElement('div');
     wrap.className = 'csel';
     const btn = document.createElement('button');
@@ -1614,9 +1626,9 @@ function upgradeSelect(id) {
     sel.classList.add('hidden');
     sel.parentNode.insertBefore(wrap, sel.nextSibling);
     render();
-    cselRenders[id] = render;
+    if (sel.id) cselRenders[sel.id] = render;
 }
-['bucketUserSelect', 'logUser', 'logKind', 'logMethod', 'logStatus'].forEach(upgradeSelect);
+['bucketUserSelect', 'logUser', 'logKind', 'logMethod', 'logStatus', 'connectUser'].forEach(upgradeSelect);
 
 /* ---------- custom confirm dialog ---------- */
 function confirmDialog(msg, yesLabel, onYes) {
@@ -1989,6 +2001,7 @@ function populateUserSelects() {
         const prev = cu.value;
         cu.innerHTML = state.users.map(u => '<option value="' + u.id + '">' + esc(u.username) + (Number(u.disabled) ? ' (disabled)' : '') + '</option>').join('');
         if (prev && state.users.some(u => String(u.id) === String(prev))) cu.value = prev;
+        if (cselRenders['connectUser']) cselRenders['connectUser']();
         renderConnect();
     }
 }
@@ -2001,6 +2014,7 @@ function renderConnect() {
     if (!u) {
         $('#connectEndpoint').value = '';
         $('#connectCli').textContent = 'Create an S3 user first.';
+        $('#connectRclone').textContent = 'Create an S3 user first.';
         return;
     }
     if (!sel.value) sel.value = u.id;
@@ -2014,6 +2028,7 @@ function renderConnect() {
     const rclone = '[' + profile + ']\ntype = s3\nprovider = Other\nendpoint = ' + origin +
         '\naccess_key_id = ' + u.access_key + '\nsecret_access_key = ' + u.secret_key + '\nregion = us-east-1';
     $('#connectCli').textContent = cli;
+    $('#connectRclone').textContent = rclone;
     $('#connectCopyCli').onclick = () => copyText(cli);
     $('#connectCopyRclone').onclick = () => copyText(rclone);
 }
@@ -2569,10 +2584,11 @@ $('#addBucketBtn').addEventListener('click', () => {
     openModal(
         '<h3>Add bucket</h3>' +
         '<form id="bucketForm">' +
-        '<div class="tf float"><select name="user_id" required class="has-value">' + userOpts + '</select><label>User</label><span class="tf-caret">' + icon('chevron-down', 18) + '</span></div>' +
+        '<div class="tf float"><select id="bucketAddUser" name="user_id" required class="has-value">' + userOpts + '</select><label>User</label><span class="tf-caret">' + icon('chevron-down', 18) + '</span></div>' +
         '<div class="tf"><input name="name" required pattern="[a-z0-9][a-z0-9.\\-]{1,61}[a-z0-9]" placeholder=" " autocomplete="off"><label>Bucket name</label></div>' +
         '<div class="modal-actions"><button type="submit" class="btn btn-filled">Create</button><button type="button" class="btn btn-text" data-close>Cancel</button></div>' +
         '</form>');
+    upgradeSelect($('#bucketAddUser'));
     $('#bucketForm').onsubmit = async ev => {
         ev.preventDefault();
         const fd = new FormData($('#bucketForm'));
@@ -2820,6 +2836,7 @@ function renderPager(contId, page, pages, perPage, onPage, onPerPage) {
     c.querySelector('[data-pg="prev"]').onclick = () => { if (page > 1) onPage(page - 1); };
     c.querySelector('[data-pg="next"]').onclick = () => { if (page < pages) onPage(page + 1); };
     c.querySelector('[data-per]').onchange = e => onPerPage(Number(e.target.value));
+    upgradeSelect(c.querySelector('[data-per]'));
 }
 
 function renderFiles() {
@@ -3115,6 +3132,7 @@ function openShare(key) {
         '<button id="shareGenBtn" class="btn btn-filled"><span class="bi">' + icon('share', 16) + '</span>Generate link</button>' +
         '<button class="btn btn-text" data-close>Close</button>' +
         '</div>');
+    upgradeSelect($('#shareExpires'));
     $('#shareGenBtn').onclick = async () => {
         const btn = $('#shareGenBtn');
         btn.disabled = true;
