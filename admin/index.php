@@ -1609,8 +1609,49 @@ function upgradeSelect(idOrEl) {
         $$('.csel.open').forEach(w => { w.classList.remove('open'); w.querySelector('.csel-list').classList.add('hidden'); });
         if (wasHidden) {
             build();
+            // Inside a modal the list must not expand the dialog's scroll
+            // area: pin it to the viewport under (or above) the button.
+            const modal = wrap.closest('#modalBox');
+            if (modal) {
+                const r = btn.getBoundingClientRect();
+                list.style.position = 'fixed';
+                list.style.left = Math.max(8, Math.min(r.left, window.innerWidth - 280)) + 'px';
+                list.style.width = Math.max(170, Math.min(r.width, 320)) + 'px';
+                list.style.top = '';
+                list.style.bottom = '';
+                list.style.maxHeight = '';
+                const spaceBelow = window.innerHeight - r.bottom;
+                if (spaceBelow < 190 && r.top > spaceBelow) {
+                    list.style.bottom = Math.max(8, window.innerHeight - r.top + 6) + 'px';
+                    list.style.maxHeight = Math.max(120, r.top - 16) + 'px';
+                } else {
+                    list.style.top = (r.bottom + 6) + 'px';
+                    list.style.maxHeight = Math.max(120, spaceBelow - 16) + 'px';
+                }
+            } else {
+                list.style.position = '';
+                list.style.top = '';
+                list.style.bottom = '';
+                list.style.left = '';
+                list.style.width = '';
+                list.style.maxHeight = '';
+            }
             list.classList.remove('hidden');
             wrap.classList.add('open');
+            // Measure-and-correct: keep the whole list inside the viewport
+            // even if geometry shifted between measuring and showing.
+            if (modal) {
+                const br = btn.getBoundingClientRect();
+                const lr = list.getBoundingClientRect();
+                if (lr.bottom > window.innerHeight - 8 || lr.top < 8) {
+                    list.style.top = '';
+                    list.style.bottom = Math.max(8, window.innerHeight - br.top + 6) + 'px';
+                    list.style.maxHeight = '';
+                    if (list.getBoundingClientRect().top < 8) {
+                        list.style.maxHeight = Math.max(120, br.top - 16) + 'px';
+                    }
+                }
+            }
         }
     };
     document.addEventListener('click', e => {
@@ -1629,6 +1670,14 @@ function upgradeSelect(idOrEl) {
     if (sel.id) cselRenders[sel.id] = render;
 }
 ['bucketUserSelect', 'logUser', 'logKind', 'logMethod', 'logStatus', 'connectUser'].forEach(upgradeSelect);
+// A viewport-pinned modal list would detach on scroll/resize: just close it.
+document.addEventListener('scroll', e => {
+    if (e.target.closest && e.target.closest('.csel-list')) return;
+    $$('.csel.open').forEach(w => { w.classList.remove('open'); w.querySelector('.csel-list').classList.add('hidden'); });
+}, true);
+window.addEventListener('resize', () => {
+    $$('.csel.open').forEach(w => { w.classList.remove('open'); w.querySelector('.csel-list').classList.add('hidden'); });
+});
 
 /* ---------- custom confirm dialog ---------- */
 function confirmDialog(msg, yesLabel, onYes) {
