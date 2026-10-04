@@ -1,0 +1,54 @@
+name: Release
+
+# On every version tag, publish a clean deploy-ready archive (runtime files
+# only - no .github workflows, tests, local data or editor workspaces) and
+# attach it to the GitHub Release. The auto-generated full-source zip stays
+# available alongside it.
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  package:
+    name: Package + attach release assets
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build clean archives
+        run: |
+          NAME="minis3-${GITHUB_REF_NAME}"
+          mkdir -p "/tmp/$NAME"
+          for f in index.php install.php reset.php config.php .htaccess nginx.conf router.php \
+                   start-dev.bat start-dev.ps1 stop-dev.bat stop-dev.ps1 \
+                   Dockerfile docker-compose.yml .dockerignore \
+                   README.md DIRECTADMIN.md NGINX.md; do
+            [ -e "$f" ] && cp "$f" "/tmp/$NAME/"
+          done
+          for d in admin lib tools docs deploy; do
+            [ -d "$d" ] && cp -r "$d" "/tmp/$NAME/"
+          done
+          mkdir -p "/tmp/$NAME/data"
+          printf '<IfModule mod_authz_core.c>\nRequire all denied\n</IfModule>\n' > "/tmp/$NAME/data/.htaccess"
+          cd /tmp
+          zip -qr "$NAME.zip" "$NAME"
+          tar czf "$NAME.tar.gz" "$NAME"
+          ls -la "$NAME.zip" "$NAME.tar.gz"
+          echo "zip entries (must not contain .github/tests/data):"
+          unzip -l "$NAME.zip" | grep -c -E "\.github/|/tests/|/data/app" || echo "clean"
+      - name: Create release if missing
+        run: |
+          gh release view "${GITHUB_REF_NAME}" > /dev/null 2>&1 || \
+            gh release create "${GITHUB_REF_NAME}" --title "MiniS3 ${GITHUB_REF_NAME}" \
+              --notes "Clean deploy package attached (runtime files only, no CI workflows or tests). Full source zip also available below."
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Upload assets
+        run: |
+          cd /tmp
+          gh release upload "${GITHUB_REF_NAME}" "minis3-${GITHUB_REF_NAME}.zip" "minis3-${GITHUB_REF_NAME}.tar.gz" --clobber
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

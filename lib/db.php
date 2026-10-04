@@ -207,32 +207,36 @@ function db_find_user_by_username(string $username): ?array
     return $row === false ? null : $row;
 }
 
-function db_find_user(int $id): ?array
+function db_find_user($id): ?array
 {
+    $id = (int)$id;
     $st = db()->prepare('SELECT * FROM users WHERE id = ?');
     $st->execute([$id]);
     $row = $st->fetch();
     return $row === false ? null : $row;
 }
 
-function db_find_bucket(int $id): ?array
+function db_find_bucket($id): ?array
 {
+    $id = (int)$id;
     $st = db()->prepare('SELECT * FROM buckets WHERE id = ?');
     $st->execute([$id]);
     $row = $st->fetch();
     return $row === false ? null : $row;
 }
 
-function db_find_bucket_by_name(int $userId, string $name): ?array
+function db_find_bucket_by_name($userId, string $name): ?array
 {
+    $userId = (int)$userId;
     $st = db()->prepare('SELECT * FROM buckets WHERE user_id = ? AND name = ?');
     $st->execute([$userId, $name]);
     $row = $st->fetch();
     return $row === false ? null : $row;
 }
 
-function db_find_object(int $bucketId, string $key): ?array
+function db_find_object($bucketId, string $key): ?array
 {
+    $bucketId = (int)$bucketId;
     $st = db()->prepare('SELECT * FROM objects WHERE bucket_id = ? AND key = ?');
     $st->execute([$bucketId, $key]);
     $row = $st->fetch();
