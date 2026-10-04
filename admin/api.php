@@ -67,6 +67,17 @@ function admin_err(string $msg, int $status = 400): void
     admin_json(['ok' => false, 'error' => $msg], $status);
 }
 
+// Drops request logs older than the configured retention (0 = keep forever).
+// Called on admin login and when logs are listed, mirroring the trash expiry
+// pattern. ts is indexed, so this stays cheap.
+function admin_prune_logs(): void
+{
+    $days = max(0, (int)db()->query('SELECT log_days FROM admin WHERE id = 1')->fetchColumn());
+    if ($days > 0) {
+        db()->exec("DELETE FROM logs WHERE ts < datetime('now', '-$days days')");
+    }
+}
+
 function admin_require_login(): void
 {
     if (empty($_SESSION['admin'])) {
@@ -139,11 +150,14 @@ function admin_route(string $method, string $action): void
             $_SESSION['admin'] = true;
             $_SESSION['csrf'] = bin2hex(random_bytes(32));
             $_SESSION['sess_ver'] = (int)db()->query('SELECT session_ver FROM admin WHERE id = 1')->fetchColumn();
-            $row = db()->query('SELECT username, log_s3, log_admin, totp_secret, trash_days FROM admin WHERE id = 1')->fetch();
+            $st = db()->prepare('UPDATE admin SET last_login_at = ?, last_login_ip = ? WHERE id = 1');
+            $st->execute([gmdate('Y-m-d H:i:s'), s3_client_ip()]);
+            admin_prune_logs();
+            $row = db()->query('SELECT username, log_s3, log_admin, totp_secret, trash_days, log_days, last_login_at, last_login_ip FROM admin WHERE id = 1')->fetch();
             if ($row === false) {
                 admin_err('Admin account not initialized. Run install.php first.', 500);
             }
-            admin_ok(['csrf' => $_SESSION['csrf'], 'username' => $row['username'], 'log_s3' => (int)$row['log_s3'], 'log_admin' => (int)$row['log_admin'], 'totp' => (string)$row['totp_secret'] !== '', 'trash_days' => (int)$row['trash_days'], 'app_name' => app_name(), 'favicon' => favicon_ext(), 'version' => APP_VERSION]);
+            admin_ok(['csrf' => $_SESSION['csrf'], 'username' => $row['username'], 'log_s3' => (int)$row['log_s3'], 'log_admin' => (int)$row['log_admin'], 'totp' => (string)$row['totp_secret'] !== '', 'trash_days' => (int)$row['trash_days'], 'log_days' => (int)$row['log_days'], 'last_login_at' => $row['last_login_at'], 'last_login_ip' => $row['last_login_ip'], 'app_name' => app_name(), 'favicon' => favicon_ext(), 'version' => APP_VERSION]);
 
         case 'logout':
             $_SESSION = [];
@@ -155,11 +169,11 @@ function admin_route(string $method, string $action): void
             if (empty($_SESSION['csrf'])) {
                 $_SESSION['csrf'] = bin2hex(random_bytes(32));
             }
-            $row = db()->query('SELECT username, log_s3, log_admin, totp_secret, trash_days FROM admin WHERE id = 1')->fetch();
+            $row = db()->query('SELECT username, log_s3, log_admin, totp_secret, trash_days, log_days, last_login_at, last_login_ip FROM admin WHERE id = 1')->fetch();
             if ($row === false) {
                 admin_err('Admin account not initialized. Run install.php first.', 500);
             }
-            admin_ok(['csrf' => $_SESSION['csrf'], 'username' => $row['username'], 'log_s3' => (int)$row['log_s3'], 'log_admin' => (int)$row['log_admin'], 'totp' => (string)$row['totp_secret'] !== '', 'trash_days' => (int)$row['trash_days'], 'app_name' => app_name(), 'favicon' => favicon_ext(), 'version' => APP_VERSION]);
+            admin_ok(['csrf' => $_SESSION['csrf'], 'username' => $row['username'], 'log_s3' => (int)$row['log_s3'], 'log_admin' => (int)$row['log_admin'], 'totp' => (string)$row['totp_secret'] !== '', 'trash_days' => (int)$row['trash_days'], 'log_days' => (int)$row['log_days'], 'last_login_at' => $row['last_login_at'], 'last_login_ip' => $row['last_login_ip'], 'app_name' => app_name(), 'favicon' => favicon_ext(), 'version' => APP_VERSION]);
 
         case 'folders':
             admin_require_login();
@@ -237,7 +251,15 @@ function admin_route(string $method, string $action): void
             $logAdmin = (int)!empty($_POST['log_admin']);
             $st = db()->prepare('UPDATE admin SET log_s3 = ?, log_admin = ? WHERE id = 1');
             $st->execute([$logS3, $logAdmin]);
-            admin_ok(['log_s3' => $logS3, 'log_admin' => $logAdmin]);
+            $out = ['log_s3' => $logS3, 'log_admin' => $logAdmin];
+            if (isset($_POST['log_days'])) {
+                $days = max(0, min(3650, (int)$_POST['log_days']));
+                $st = db()->prepare('UPDATE admin SET log_days = ? WHERE id = 1');
+                $st->execute([$days]);
+                $out['log_days'] = $days;
+                admin_prune_logs();
+            }
+            admin_ok($out);
 
         case 'update_settings':
             admin_require_login();
@@ -257,6 +279,13 @@ function admin_route(string $method, string $action): void
                 $st = db()->prepare('UPDATE admin SET trash_days = ? WHERE id = 1');
                 $st->execute([$days]);
                 $out['trash_days'] = $days;
+            }
+            if (isset($_POST['log_days'])) {
+                $days = max(0, min(3650, (int)$_POST['log_days']));
+                $st = db()->prepare('UPDATE admin SET log_days = ? WHERE id = 1');
+                $st->execute([$days]);
+                $out['log_days'] = $days;
+                admin_prune_logs();
             }
             admin_ok($out);
 
@@ -550,6 +579,17 @@ function admin_route(string $method, string $action): void
             admin_revoke_sessions();
             return;
 
+        case 'lifecycle':
+            admin_lifecycle($method);
+            return;
+
+        case 'server_info':
+            if ($method !== 'GET') {
+                admin_err('Bad request', 400);
+            }
+            admin_server_info();
+            return;
+
         default:
             admin_err('Unknown action: ' . $action, 404);
     }
@@ -714,11 +754,14 @@ function admin_passkey_login(): void
     $_SESSION['admin'] = true;
     $_SESSION['csrf'] = bin2hex(random_bytes(32));
     $_SESSION['sess_ver'] = (int)db()->query('SELECT session_ver FROM admin WHERE id = 1')->fetchColumn();
-    $row = db()->query('SELECT username, log_s3, log_admin, totp_secret, trash_days FROM admin WHERE id = 1')->fetch();
+    $st = db()->prepare('UPDATE admin SET last_login_at = ?, last_login_ip = ? WHERE id = 1');
+    $st->execute([gmdate('Y-m-d H:i:s'), s3_client_ip()]);
+    admin_prune_logs();
+    $row = db()->query('SELECT username, log_s3, log_admin, totp_secret, trash_days, log_days, last_login_at, last_login_ip FROM admin WHERE id = 1')->fetch();
     if ($row === false) {
         admin_err('Admin account not initialized. Run install.php first.', 500);
     }
-    admin_ok(['csrf' => $_SESSION['csrf'], 'username' => $row['username'], 'log_s3' => (int)$row['log_s3'], 'log_admin' => (int)$row['log_admin'], 'totp' => (string)$row['totp_secret'] !== '', 'trash_days' => (int)$row['trash_days'], 'app_name' => app_name(), 'favicon' => favicon_ext(), 'version' => APP_VERSION]);
+    admin_ok(['csrf' => $_SESSION['csrf'], 'username' => $row['username'], 'log_s3' => (int)$row['log_s3'], 'log_admin' => (int)$row['log_admin'], 'totp' => (string)$row['totp_secret'] !== '', 'trash_days' => (int)$row['trash_days'], 'log_days' => (int)$row['log_days'], 'last_login_at' => $row['last_login_at'], 'last_login_ip' => $row['last_login_ip'], 'app_name' => app_name(), 'favicon' => favicon_ext(), 'version' => APP_VERSION]);
 }
 
 function admin_users(string $method): void
@@ -818,6 +861,19 @@ function admin_users(string $method): void
             $st = db()->prepare('UPDATE users SET disabled = ? WHERE id = ?');
             $st->execute([!empty($_POST['disabled']) ? 1 : 0, $id]);
         }
+        if (!empty($_POST['regen_access'])) {
+            $tries = 0;
+            do {
+                $ak = s3_generate_access_key();
+                $tries++;
+            } while (db_find_user_by_access_key($ak) !== null && $tries < 10);
+            if (db_find_user_by_access_key($ak) !== null) {
+                admin_err('Could not generate a unique access key. Try again.', 500);
+            }
+            $st = db()->prepare('UPDATE users SET access_key = ? WHERE id = ?');
+            $st->execute([$ak, $id]);
+            $user['access_key'] = $ak;
+        }
         if (!empty($_POST['regen_secret'])) {
             $secret = s3_generate_secret_key();
             $st = db()->prepare('UPDATE users SET secret_key = ? WHERE id = ?');
@@ -854,16 +910,18 @@ function admin_buckets(string $method): void
     if ($method === 'GET') {
         $userId = (int)($_GET['user_id'] ?? 0);
         if ($userId > 0) {
-            $st = db()->prepare('SELECT b.id, b.user_id, b.name, b.created_at, u.username,
+            $st = db()->prepare('SELECT b.id, b.user_id, b.name, b.created_at, b.is_public, u.username,
                 (SELECT COUNT(*) FROM objects o WHERE o.bucket_id = b.id) AS object_count,
-                (SELECT COALESCE(SUM(o.size), 0) FROM objects o WHERE o.bucket_id = b.id) AS size
+                (SELECT COALESCE(SUM(o.size), 0) FROM objects o WHERE o.bucket_id = b.id) AS size,
+                (SELECT COUNT(*) FROM lifecycle_rules r WHERE r.bucket_id = b.id) AS rules
                 FROM buckets b JOIN users u ON u.id = b.user_id WHERE b.user_id = ? ORDER BY b.name');
             $st->execute([$userId]);
             admin_ok($st->fetchAll());
         }
-        $rows = db()->query('SELECT b.id, b.user_id, b.name, b.created_at, u.username,
+        $rows = db()->query('SELECT b.id, b.user_id, b.name, b.created_at, b.is_public, u.username,
             (SELECT COUNT(*) FROM objects o WHERE o.bucket_id = b.id) AS object_count,
-            (SELECT COALESCE(SUM(o.size), 0) FROM objects o WHERE o.bucket_id = b.id) AS size
+            (SELECT COALESCE(SUM(o.size), 0) FROM objects o WHERE o.bucket_id = b.id) AS size,
+            (SELECT COUNT(*) FROM lifecycle_rules r WHERE r.bucket_id = b.id) AS rules
             FROM buckets b JOIN users u ON u.id = b.user_id ORDER BY u.username, b.name')->fetchAll();
         admin_ok($rows);
     }
@@ -932,9 +990,23 @@ function admin_buckets(string $method): void
         admin_trash_purge_bucket($user['username'], $b['name']);
         $st = db()->prepare('DELETE FROM uploads WHERE bucket_id = ?');
         $st->execute([$id]);
+        $st = db()->prepare('DELETE FROM lifecycle_rules WHERE bucket_id = ?');
+        $st->execute([$id]);
         $st = db()->prepare('DELETE FROM buckets WHERE id = ?');
         $st->execute([$id]);
         admin_ok();
+    }
+
+    if ($sub === 'visibility') {
+        $id = (int)($_POST['id'] ?? 0);
+        $b = db_find_bucket($id);
+        if ($b === null) {
+            admin_err('Bucket not found', 404);
+        }
+        $public = !empty($_POST['public']) ? 1 : 0;
+        $st = db()->prepare('UPDATE buckets SET is_public = ? WHERE id = ?');
+        $st->execute([$public, $id]);
+        admin_ok(['id' => $id, 'is_public' => $public]);
     }
 
     admin_err('Bad request', 400);
@@ -953,6 +1025,7 @@ function admin_objects(string $method): void
         if (($_GET['_sub'] ?? '') === 'zip') {
             admin_download_zip($b, $prefix);
         }
+        lifecycle_enforce_bucket($bucketId);
         $perPage = min((int)($_GET['per_page'] ?? 100), 500);
         if ($perPage < 1) {
             $perPage = 100;
@@ -1282,7 +1355,18 @@ function admin_objects(string $method): void
         if ($fname === '' || $fname === '.' || $fname === '..') {
             admin_err('Invalid file name.');
         }
-        $key = ($prefix !== '' ? rtrim($prefix, '/') . '/' : '') . $fname;
+        // Optional relative sub-path for folder uploads (each segment is
+        // validated; the final key check below rejects any traversal).
+        $rel = trim((string)($_GET['path'] ?? ''), '/');
+        if ($rel !== '') {
+            foreach (explode('/', $rel) as $seg) {
+                if ($seg === '' || $seg === '.' || $seg === '..') {
+                    admin_err('Invalid object key.');
+                }
+            }
+            $rel .= '/';
+        }
+        $key = ($prefix !== '' ? rtrim($prefix, '/') . '/' : '') . $rel . $fname;
         if (!s3_key_valid($key) || s3_is_folder_marker($key)) {
             admin_err('Invalid object key.');
         }
@@ -1570,6 +1654,7 @@ function admin_logs_filter(): array
 function admin_logs(string $method): void
 {
     admin_require_login();
+    admin_prune_logs();
     if ($method === 'GET') {
         $perPage = min((int)($_GET['per_page'] ?? 100), 500);
         if ($perPage < 1) {
@@ -1735,6 +1820,104 @@ function admin_revoke_sessions(): void
     db()->exec('UPDATE admin SET session_ver = session_ver + 1 WHERE id = 1');
     $_SESSION['sess_ver'] = (int)db()->query('SELECT session_ver FROM admin WHERE id = 1')->fetchColumn();
     admin_ok();
+}
+
+function admin_lifecycle(string $method): void
+{
+    admin_require_login();
+    if ($method === 'GET') {
+        $bucketId = (int)($_GET['bucket_id'] ?? 0);
+        if ($bucketId > 0) {
+            $st = db()->prepare('SELECT id, bucket_id, prefix, days FROM lifecycle_rules WHERE bucket_id = ? ORDER BY prefix');
+            $st->execute([$bucketId]);
+        } else {
+            $st = db()->query('SELECT r.id, r.bucket_id, r.prefix, r.days, b.name AS bucket, u.username
+                FROM lifecycle_rules r JOIN buckets b ON b.id = r.bucket_id JOIN users u ON u.id = b.user_id
+                ORDER BY u.username, b.name, r.prefix');
+        }
+        admin_ok($st->fetchAll());
+    }
+    admin_require_csrf();
+    $sub = (string)($_POST['_sub'] ?? '');
+    if ($sub === 'add') {
+        $bucketId = (int)($_POST['bucket_id'] ?? 0);
+        $prefix = trim((string)($_POST['prefix'] ?? ''));
+        $days = (int)($_POST['days'] ?? 0);
+        $b = db_find_bucket($bucketId);
+        if ($b === null) {
+            admin_err('Bucket not found', 404);
+        }
+        if ($days < 1 || $days > 3650) {
+            admin_err('Retention must be 1-3650 days.');
+        }
+        if ($prefix !== '' && !s3_key_valid($prefix)) {
+            admin_err('Invalid prefix.');
+        }
+        $st = db()->prepare('INSERT INTO lifecycle_rules (bucket_id, prefix, days) VALUES (?,?,?)
+            ON CONFLICT(bucket_id, prefix) DO UPDATE SET days = excluded.days');
+        $st->execute([$bucketId, $prefix, $days]);
+        lifecycle_enforce_bucket($bucketId);
+        admin_ok();
+    }
+    if ($sub === 'delete') {
+        $id = (int)($_POST['id'] ?? 0);
+        db()->prepare('DELETE FROM lifecycle_rules WHERE id = ?')->execute([$id]);
+        admin_ok();
+    }
+    admin_err('Bad request', 400);
+}
+
+function admin_data_dir_size(string $dir, int $cap = 500000): int
+{
+    $total = 0;
+    try {
+        $it = new RecursiveIteratorIterator(
+            new RecursiveDirectoryIterator($dir, FilesystemIterator::SKIP_DOTS),
+            RecursiveIteratorIterator::LEAVES_ONLY
+        );
+        foreach ($it as $f) {
+            if (!$f->isFile()) {
+                continue;
+            }
+            $total += $f->getSize();
+            if ($total >= $cap * 1048576) {
+                break;
+            }
+        }
+    } catch (Throwable $e) {
+    }
+    return $total;
+}
+
+function admin_server_info(): void
+{
+    admin_require_login();
+    $dbSize = 0;
+    foreach (['app.sqlite', 'app.sqlite-wal', 'app.sqlite-shm'] as $f) {
+        $s = @filesize(DATA_DIR . '/' . $f);
+        if ($s !== false) {
+            $dbSize += $s;
+        }
+    }
+    $count = fn(string $sql): int => (int)db()->query($sql)->fetchColumn();
+    admin_ok([
+        'php_version' => PHP_VERSION,
+        'sapi' => php_sapi_name(),
+        'sqlite_version' => (string)db()->query('SELECT sqlite_version()')->fetchColumn(),
+        'disk_free' => (int)@disk_free_space(DATA_DIR),
+        'disk_total' => (int)@disk_total_space(DATA_DIR),
+        'data_size' => admin_data_dir_size(DATA_DIR),
+        'db_size' => $dbSize,
+        'users' => $count('SELECT COUNT(*) FROM users'),
+        'buckets' => $count('SELECT COUNT(*) FROM buckets'),
+        'objects' => $count('SELECT COUNT(*) FROM objects'),
+        'trash_items' => $count('SELECT COUNT(*) FROM trash'),
+        'pending_uploads' => $count('SELECT COUNT(*) FROM uploads'),
+        'log_rows' => $count('SELECT COUNT(*) FROM logs'),
+        'oldest_log' => db()->query('SELECT MIN(ts) FROM logs')->fetchColumn(),
+        'newest_log' => db()->query('SELECT MAX(ts) FROM logs')->fetchColumn(),
+        'version' => APP_VERSION,
+    ]);
 }
 
 function admin_stats(): void

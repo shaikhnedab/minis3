@@ -110,6 +110,13 @@ label.check input{width:17px;height:17px;accent-color:var(--primary)}
 .box.ok{background:var(--ok-container);color:var(--on-ok-container)}
 .box.warn{background:var(--warn-container);color:var(--on-warn-container)}
 code{background:rgba(127,127,127,.15);border-radius:6px;padding:2px 7px;font-size:12px}
+.pwmeter{height:6px;background:var(--surface-1);border:1px solid var(--outline);border-radius:99px;overflow:hidden;margin:-6px 0 4px}
+.pwmeter div{height:100%;width:0;transition:width .2s}
+.pwmeter div.weak{background:var(--error)}
+.pwmeter div.fair{background:var(--warn)}
+.pwmeter div.good{background:var(--primary)}
+.pwmeter div.strong{background:var(--ok)}
+.pwhint{font-size:12px;color:var(--on-surface-var);margin:0 0 12px}
 
 /* field-instrument pass */
 body{font-family:'Space Grotesk',system-ui,-apple-system,'Segoe UI',Roboto,Arial,sans-serif;background-image:linear-gradient(rgba(96,150,214,.07) 1px,transparent 1px),linear-gradient(90deg,rgba(96,150,214,.07) 1px,transparent 1px);background-size:28px 28px;background-attachment:fixed}
@@ -161,6 +168,8 @@ code{font-family:'IBM Plex Mono',ui-monospace,'SFMono-Regular',Menlo,Consolas,'C
         <input type="password" name="password" id="ipass" required minlength="8" autocomplete="new-password" placeholder=" ">
         <label for="ipass">New password (min 8 characters)</label>
       </div>
+      <div class="pwmeter" id="ipwMeter"><div></div></div>
+      <div class="pwhint" id="ipwHint">Use 12+ characters with mixed case, digits and symbols.</div>
       <div class="tf">
         <input type="password" name="password2" id="ipass2" required minlength="8" autocomplete="new-password" placeholder=" ">
         <label for="ipass2">Repeat new password</label>
@@ -173,6 +182,28 @@ code{font-family:'IBM Plex Mono',ui-monospace,'SFMono-Regular',Menlo,Consolas,'C
 </div>
 <script>
 try { var s = localStorage.getItem('minis3_theme'); if (s !== 'light' && s !== 'dark') s = (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) ? 'dark' : 'light'; if (s) document.documentElement.dataset.theme = s; } catch (e) {}
+(function () {
+    var inp = document.getElementById('ipass');
+    if (!inp) return;
+    function score(pw) {
+        pw = String(pw || '');
+        if (!pw) return { pct: 0, label: '' };
+        var classes = (/[a-z]/.test(pw) ? 1 : 0) + (/[A-Z]/.test(pw) ? 1 : 0) + (/[0-9]/.test(pw) ? 1 : 0) + (/[^A-Za-z0-9]/.test(pw) ? 1 : 0);
+        var pts = Math.min(40, pw.length * 3) + classes * 12;
+        if (/^(password|admin|minis3|12345678|qwerty|letmein|welcome).*/i.test(pw)) pts = Math.min(pts, 15);
+        var pct = Math.max(4, Math.min(100, Math.round(pts)));
+        return { pct: pct, label: pct < 35 ? 'Weak' : (pct < 65 ? 'Fair' : (pct < 85 ? 'Good' : 'Strong')) };
+    }
+    var meter = document.getElementById('ipwMeter');
+    var hint = document.getElementById('ipwHint');
+    inp.addEventListener('input', function () {
+        var sc = score(inp.value);
+        var bar = meter.querySelector('div');
+        bar.style.width = sc.pct + '%';
+        bar.className = sc.pct < 35 ? 'weak' : (sc.pct < 65 ? 'fair' : (sc.pct < 85 ? 'good' : 'strong'));
+        hint.textContent = inp.value ? ('Strength: ' + sc.label + (inp.value.length < 12 ? ' - aim for 12+ characters.' : '')) : 'Use 12+ characters with mixed case, digits and symbols.';
+    });
+})();
 </script>
 </body>
 </html>

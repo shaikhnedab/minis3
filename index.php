@@ -72,11 +72,54 @@ if ($path === '/favicon.ico') {
     exit;
 }
 
+// Health check: public, unauthenticated and never logged, so load balancers
+// and uptime monitors can poll it without credentials or log noise. Note this
+// shadows a bucket literally named "health" (see README reserved names).
+if ($path === '/health' && ($method === 'GET' || $method === 'HEAD')) {
+    $dbOk = false;
+    try {
+        $dbOk = db()->query('SELECT 1')->fetchColumn() !== false;
+    } catch (Throwable $e) {
+    }
+    $payload = json_encode([
+        'ok' => $dbOk,
+        'app' => APP_NAME,
+        'version' => APP_VERSION,
+        'time' => gmdate('Y-m-d H:i:s'),
+        'disk_free_bytes' => (int)@disk_free_space(DATA_DIR),
+        'db' => $dbOk ? 'ok' : 'error',
+    ]);
+    http_response_code($dbOk ? 200 : 503);
+    header('Content-Type: application/json');
+    header('Content-Length: ' . strlen($payload));
+    header('Cache-Control: no-store');
+    if ($method === 'GET') {
+        echo $payload;
+    }
+    exit;
+}
+
 try {
     $user = s3_authenticate();
     $ctx['user_id'] = (int)$user['id'];
     s3_route($method, $path, $query, $user, $ctx);
 } catch (S3Exception $e) {
+    // Public buckets serve object GET/HEAD without authentication. Anything
+    // else (or an ambiguous/erroring public lookup) keeps the original error.
+    $pub = ($method === 'GET' || $method === 'HEAD') ? s3_public_object($method, $path, $query) : null;
+    if ($pub !== null) {
+        [$puser, $pb, $pkey] = $pub;
+        $ctx['user_id'] = (int)$puser['id'];
+        try {
+            if ($method === 'GET') {
+                s3_get_object($puser, $pb, $pkey, $ctx);
+            } else {
+                s3_head_object($puser, $pb, $pkey, $ctx);
+            }
+        } catch (S3Exception $e2) {
+            $e = $e2;
+        }
+    }
     s3_finish(s3_error_xml($e, $path), $e->s3_status, ['Content-Type' => 'application/xml'], $ctx);
 } catch (Throwable $e) {
     @error_log('MiniS3 internal error: ' . $e->getMessage() . ' @ ' . $path);

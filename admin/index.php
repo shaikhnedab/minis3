@@ -732,6 +732,18 @@ tr.off td{opacity:.55}
 .stat-delta.flat{color:var(--on-surface-var)}
 tr.slow td:last-child{color:var(--warn);font-weight:700}
 .icon-btn.on{border:1px solid var(--primary);color:var(--primary);background:rgba(211,138,77,.12)}
+/* password strength meter */
+.pwmeter{height:6px;background:var(--surface-2);border:1px solid var(--outline-var);border-radius:99px;overflow:hidden;margin:2px 0 6px}
+.pwmeter div{height:100%;width:0;border-radius:99px;transition:width .2s var(--ease-standard)}
+.pwmeter div.weak{background:var(--error)}
+.pwmeter div.fair{background:var(--warn)}
+.pwmeter div.good{background:var(--primary)}
+.pwmeter div.strong{background:var(--ok)}
+.userlink{cursor:pointer}
+.userlink:hover{color:var(--primary);text-decoration:underline}
+/* drag & drop move between folders */
+tr[data-key][draggable="true"],.gcard[data-key]{cursor:grab}
+.drover{outline:2px dashed var(--primary) !important;outline-offset:-2px;border-radius:8px}
 /* SteamFinder-style theme toggle: bordered square, icon swaps with theme */
 #themeBtn{width:32px;height:32px;flex:none;padding:0;border:1px solid var(--outline-var);border-radius:6px;background:var(--surface-2);color:var(--on-surface-var)}
 #themeBtn:hover{background:var(--surface-2);border-color:var(--primary);color:var(--primary)}
@@ -894,6 +906,12 @@ body{font-size:13.5px}
             <div id="recentActivity"></div>
           </div>
         </div>
+        <div class="stats-grid">
+          <div class="card stat-panel" style="grid-column:1/-1">
+            <h3 style="margin-bottom:10px">Server health</h3>
+            <div id="serverInfo"><p class="muted" style="margin:0">Loading&hellip;</p></div>
+          </div>
+        </div>
       </section>
 
       <section id="tab-users" class="tab-panel hidden">
@@ -931,7 +949,7 @@ body{font-size:13.5px}
               <th><button type="button" class="sortbtn" data-bsort="object_count">Objects<span class="sortmark"></span></button></th>
               <th><button type="button" class="sortbtn" data-bsort="size">Size<span class="sortmark"></span></button></th>
               <th><button type="button" class="sortbtn" data-bsort="created_at">Created<span class="sortmark"></span></button></th>
-              <th style="width:240px"></th></tr></thead>
+              <th style="width:300px"></th></tr></thead>
               <tbody id="bucketsTbody"></tbody>
             </table>
           </div>
@@ -944,6 +962,8 @@ body{font-size:13.5px}
           <div class="searchfield"><span data-icon="search"></span><input type="search" id="objSearch" placeholder="Search keys...  (/)" autocomplete="off" aria-label="Search keys"></div>
           <button id="zipBtn" class="btn btn-tonal btn-sm" title="Download this folder as ZIP"><span class="bi" data-icon="download"></span>ZIP</button>
           <button id="newFolderBtn" class="btn btn-tonal btn-sm"><span class="bi" data-icon="folder-plus"></span>Folder</button>
+          <button id="uploadFolderBtn" class="btn btn-tonal btn-sm" title="Upload a whole folder, keeping its structure"><span class="bi" data-icon="upload"></span>Folder up</button>
+          <input type="file" id="uploadFolderInput" class="hidden" webkitdirectory>
           <button id="newFileBtn" class="btn btn-tonal btn-sm"><span class="bi" data-icon="file-plus"></span>File</button>
           <input type="file" id="uploadInput" class="hidden" multiple>
           <button id="viewToggleBtn" class="icon-btn" title="Switch list / grid view" aria-label="Switch list / grid view"></button>
@@ -1053,9 +1073,10 @@ body{font-size:13.5px}
         </div>
         <div class="card" style="margin:0 0 16px;max-width:480px">
           <h3>Request logging</h3>
-          <p class="muted" style="margin:2px 0 6px">Disable to stop new entries from being written to the logs.</p>
+          <p class="muted" style="margin:2px 0 6px">Disable to stop new entries from being written to the logs. Old entries are pruned automatically after the retention below (0 = keep forever).</p>
           <label class="switch"><input type="checkbox" id="logS3"><span class="track"><span class="thumb"></span></span><span>Log S3 API requests</span></label>
           <label class="switch"><input type="checkbox" id="logAdmin"><span class="track"><span class="thumb"></span></span><span>Log admin panel requests</span></label>
+          <div class="tf" style="max-width:240px"><input type="number" name="log_days" id="logDays" min="0" max="3650" required placeholder=" "><label for="logDays">Keep logs (days, 0 = forever)</label></div>
           <button id="saveLogsBtn" class="btn btn-filled" style="margin-top:12px">Save</button>
           <div id="logsError" class="error hidden"></div>
         </div>
@@ -1075,6 +1096,8 @@ body{font-size:13.5px}
           <form id="settingsForm">
             <div class="tf"><input type="password" name="current" id="pwCurrent" required placeholder=" "><label for="pwCurrent">Current password</label></div>
             <div class="tf"><input type="password" name="new" id="pwNew" required minlength="8" placeholder=" "><label for="pwNew">New password</label></div>
+            <div class="pwmeter" id="pwMeter"><div></div></div>
+            <div class="muted" id="pwHint" style="font-size:12px;margin:-4px 0 8px">Use 12+ characters with mixed case, digits and symbols.</div>
             <div class="tf"><input type="password" name="new2" id="pwNew2" required placeholder=" "><label for="pwNew2">Repeat new password</label></div>
             <button type="submit" class="btn btn-filled">Change password</button>
             <div id="settingsError" class="error hidden"></div>
@@ -1141,6 +1164,7 @@ body{font-size:13.5px}
         <div class="card" style="margin:0 0 16px;max-width:640px;border-color:var(--error)">
           <h3>Sessions</h3>
           <p class="muted" style="margin:2px 0 10px">This browser session stays signed in. Revoking signs out every other browser and device immediately.</p>
+          <p class="muted" style="margin:0 0 10px;font-size:12.5px" id="lastLoginLine">Last sign-in: &ndash;</p>
           <div class="modal-actions" style="justify-content:flex-start">
             <button id="revokeSessionsBtn" class="btn btn-danger btn-sm"><span class="bi" data-icon="key"></span>Revoke all other sessions</button>
           </div>
@@ -1631,6 +1655,13 @@ function showApp(uname, opts) {
         state.trashEnabled = Number(opts.trash_days) > 0;
         $('#trashDays').value = Number(opts.trash_days);
     }
+    if (opts.log_days !== undefined) {
+        $('#logDays').value = Number(opts.log_days);
+        const ll = $('#lastLoginLine');
+        if (ll) {
+            ll.textContent = 'Last sign-in: ' + (opts.last_login_at ? fmtTime(opts.last_login_at) + ' from ' + (opts.last_login_ip || '?') : 'this session is the first recorded');
+        }
+    }
     if (opts.app_name !== undefined) {
         $('#appNameInput').value = opts.app_name;
     }
@@ -1736,7 +1767,7 @@ function activateTab(tab, updateHash) {
     if (updateHash !== false && location.hash !== '#' + tab) {
         location.hash = tab;
     }
-    if (tab === 'stats') loadStats();
+    if (tab === 'stats') { loadStats(); loadServerInfo(); }
     if (tab === 'users') loadUsers();
     if (tab === 'buckets') loadBuckets().then(maybeRestoreFilesView);
     if (tab === 'logs') loadLogs();
@@ -1891,7 +1922,30 @@ async function loadStats() {
     }
 }
 
-$('#refreshStatsBtn').addEventListener('click', loadStats);
+$('#refreshStatsBtn').addEventListener('click', () => { loadStats(); loadServerInfo(); });
+
+async function loadServerInfo() {
+    const box = $('#serverInfo');
+    if (!box) return;
+    let d;
+    try {
+        d = await api('server_info', { method: 'GET' });
+    } catch (err) {
+        box.innerHTML = '<p class="muted" style="margin:0">Could not load server info.</p>';
+        return;
+    }
+    const diskPct = d.disk_total > 0 ? Math.min(100, Math.round((d.disk_total - d.disk_free) / d.disk_total * 100)) : 0;
+    const row = (k, v) => '<div class="tu-row"><span>' + k + '</span><span style="flex:1">' + v + '</span></div>';
+    box.innerHTML =
+        row('PHP', '<code>' + esc(d.php_version) + '</code> <span class="muted">' + esc(d.sapi) + '</span>') +
+        row('SQLite', '<code>' + esc(d.sqlite_version) + '</code>') +
+        row('Disk free', '<code>' + esc(fmtBytes(d.disk_free)) + '</code> of <code>' + esc(fmtBytes(d.disk_total)) + '</code>' +
+            '<div class="tu-bar" style="margin-top:4px"><div style="width:' + diskPct + '%"></div></div>') +
+        row('Data dir', '<code>' + esc(fmtBytes(d.data_size)) + '</code> <span class="muted">· DB ' + esc(fmtBytes(d.db_size)) + '</span>') +
+        row('Objects', '<code>' + Number(d.objects).toLocaleString() + '</code> <span class="muted">in ' + Number(d.buckets).toLocaleString() + ' buckets · ' + Number(d.users).toLocaleString() + ' users</span>') +
+        row('Trash', '<code>' + Number(d.trash_items).toLocaleString() + '</code> <span class="muted">· pending uploads ' + Number(d.pending_uploads).toLocaleString() + '</span>') +
+        row('Logs', '<code>' + Number(d.log_rows).toLocaleString() + '</code> <span class="muted">' + (d.oldest_log ? esc(fmtRel(d.oldest_log)) + ' – ' + esc(fmtRel(d.newest_log)) : 'empty') + '</span>');
+}
 
 $$('.stat-card[data-goto]').forEach(c => c.addEventListener('click', () => activateTab(c.dataset.goto)));
 $$('.segmented [data-range]').forEach(b => b.addEventListener('click', () => {
@@ -2216,7 +2270,7 @@ function renderUsers() {
             storageHtml += '<div title="S3 requests, last 14 days">' + sparkline(u.usage14, 64, 18) + '</div>';
         }
         tr.innerHTML =
-            '<td><span class="cellname"><span class="ficon" style="color:var(--primary)">' + icon('user', 20) + '</span><strong class="nm">' + esc(u.username) + '</strong>' + (Number(u.disabled) ? ' <span class="st st-off">off</span>' : '') + '</span></td>' +
+            '<td><span class="cellname"><span class="ficon" style="color:var(--primary)">' + icon('user', 20) + '</span><strong class="nm userlink" data-uid="' + u.id + '" title="Show details">' + esc(u.username) + '</strong>' + (Number(u.disabled) ? ' <span class="st st-off">off</span>' : '') + '</span></td>' +
             '<td><code>' + esc(u.access_key) + '</code></td>' +
             '<td><code>' + esc(maskKey(u.secret_key)) + '</code></td>' +
             '<td title="' + esc(meta) + '">' + storageHtml + '</td>' +
@@ -2343,6 +2397,7 @@ function openEditUser(id) {
         '<div class="tf"><input name="quota_mb" type="number" min="0" step="1" value="' + Math.round(Number(u.quota_bytes || 0) / 1048576) + '" placeholder=" " autocomplete="off"><label>Storage quota in MB (0 = unlimited)</label></div>' +
         '<div class="modal-actions">' +
         '<button type="submit" class="btn btn-filled">Save</button>' +
+        '<button type="button" id="regenAkBtn" class="btn btn-tonal"><span class="bi">' + icon('key', 16) + '</span>Regenerate access key</button>' +
         '<button type="button" id="regenBtn" class="btn btn-tonal"><span class="bi">' + icon('refresh', 16) + '</span>Regenerate secret key</button>' +
         '<button type="button" class="btn btn-text" data-close>Cancel</button>' +
         '</div>' +
@@ -2371,7 +2426,65 @@ function openEditUser(id) {
             } catch (err) { toast(err.message, 'err'); }
         });
     };
+    $('#regenAkBtn').onclick = () => {
+        confirmDialog('Regenerate the access key? The old access key stops working immediately on every client.', 'Regenerate', async () => {
+            const fd = new FormData($('#userForm'));
+            fd.append('_sub', 'update');
+            fd.append('regen_access', '1');
+            try {
+                const u2 = await api('users', { form: fd });
+                closeModal();
+                await loadUsers();
+                const fresh = state.users.find(x => x.id === id);
+                if (fresh) showKeys(fresh);
+                else toast('Access key regenerated', 'ok');
+            } catch (err) { toast(err.message, 'err'); }
+        });
+    };
 }
+
+async function openUserDetail(id) {
+    const u = state.users.find(x => x.id === id);
+    if (!u) return;
+    const quota = Number(u.quota_bytes || 0);
+    const used = Number(u.storage_used || 0);
+    // Unfiltered bucket list: the tab's list may carry a user filter.
+    let allBuckets = state.buckets;
+    try {
+        allBuckets = await api('buckets', { method: 'GET' });
+    } catch (err) {}
+    const buckets = allBuckets.filter(b => Number(b.user_id) === Number(id));
+    let recent = [];
+    try {
+        const d = await api('logs', { method: 'GET', params: { user_id: id, per_page: 5 } });
+        recent = d.rows || [];
+    } catch (err) {}
+    openModal(
+        '<h3>' + esc(u.username) + (Number(u.disabled) ? ' <span class="st st-off">disabled</span>' : '') + '</h3>' +
+        '<table class="grid"><tbody>' +
+        '<tr><td>Access key</td><td><code>' + esc(u.access_key) + '</code></td></tr>' +
+        '<tr><td>Storage</td><td>' + esc(fmtBytes(used)) + (quota > 0 ? ' of ' + esc(fmtBytes(quota)) : ' (unlimited)') + ' in ' + Number(u.object_count || 0) + ' object(s)</td></tr>' +
+        '<tr><td>Last active</td><td>' + esc(u.last_active ? fmtRel(u.last_active) : 'never') + '</td></tr>' +
+        '<tr><td>Created</td><td>' + esc(fmtTime(u.created_at)) + '</td></tr>' +
+        '<tr><td>Buckets (' + buckets.length + ')</td><td>' + (buckets.length ? buckets.map(b => '<code>' + esc(b.name) + '</code>').join(' ') : '<span class="muted">none</span>') + '</td></tr>' +
+        '</tbody></table>' +
+        (recent.length ? '<p class="muted" style="margin:12px 0 6px">Recent requests</p>' +
+        recent.map(r => '<div class="ra-row"><span class="st ' + (r.status >= 500 ? 'st5' : (r.status >= 400 ? 'st4' : 'st2')) + '">' + Number(r.status) + '</span>' +
+            '<code>' + esc(r.method || '') + '</code><span class="ra-uri">' + esc(r.uri || '') + '</span></div>').join('') : '') +
+        '<div class="modal-actions">' +
+        '<button id="udKeysBtn" class="btn btn-tonal btn-sm">Keys</button>' +
+        '<button id="udEditBtn" class="btn btn-tonal btn-sm">Edit</button>' +
+        '<button id="udToggleBtn" class="btn btn-tonal btn-sm">' + (Number(u.disabled) ? 'Enable' : 'Disable') + '</button>' +
+        '<button class="btn btn-text" data-close>Close</button></div>');
+    $('#udKeysBtn').onclick = () => showKeys(u);
+    $('#udEditBtn').onclick = () => openEditUser(id);
+    $('#udToggleBtn').onclick = () => { closeModal(); toggleUser(id); };
+}
+
+$('#usersTbody').addEventListener('click', e => {
+    const link = e.target.closest('.userlink');
+    if (link) { openUserDetail(Number(link.dataset.uid)); return; }
+});
 
 async function deleteUser(id) {
     const u = state.users.find(x => x.id === id);
@@ -2417,14 +2530,18 @@ function renderBuckets() {
     }
     for (const b of sortRows(state.buckets, state.bucketSort, BUCKET_SORT_COLS)) {
         const tr = document.createElement('tr');
+        const badges = (Number(b.is_public) ? ' <span class="st st2" title="Public: anyone can download objects">public</span>' : '') +
+            (Number(b.rules) ? ' <span class="st" title="' + Number(b.rules) + ' lifecycle rule(s)">' + Number(b.rules) + ' rule' + (Number(b.rules) === 1 ? '' : 's') + '</span>' : '');
         tr.innerHTML =
-            '<td><span class="cellname"><span class="ficon" style="color:var(--primary)">' + icon('hard-drive', 20) + '</span><strong class="nm">' + esc(b.name) + '</strong></span></td>' +
+            '<td><span class="cellname"><span class="ficon" style="color:var(--primary)">' + icon('hard-drive', 20) + '</span><strong class="nm">' + esc(b.name) + '</strong>' + badges + '</span></td>' +
             '<td class="muted">' + esc(b.username) + '</td>' +
             '<td>' + Number(b.object_count).toLocaleString() + '</td>' +
             '<td title="' + Number(b.object_count).toLocaleString() + ' objects">' + esc(fmtBytes(b.size || 0)) + '</td>' +
             '<td class="muted" title="' + esc(fmtTime(b.created_at)) + '">' + esc(fmtRel(b.created_at)) + '</td>' +
             '<td class="actions">' +
             '<button data-act="open" data-id="' + b.id + '" class="btn btn-tonal btn-sm"><span class="bi">' + icon('folder', 16) + '</span>Open</button>' +
+            '<button data-act="lifecycle" data-id="' + b.id + '" class="btn btn-tonal btn-sm" title="Auto-expire objects by prefix"><span class="bi">' + icon('clock', 16) + '</span>Lifecycle</button>' +
+            '<button data-act="vis" data-id="' + b.id + '" class="btn btn-outlined btn-sm" title="Toggle public downloads">' + (Number(b.is_public) ? 'Make private' : 'Make public') + '</button>' +
             '<button data-act="rename" data-id="' + b.id + '" class="btn btn-outlined btn-sm"><span class="bi">' + icon('rename', 16) + '</span>Rename</button>' +
             '<button data-act="delete" data-id="' + b.id + '" class="btn btn-danger btn-sm"><span class="bi">' + icon('trash', 16) + '</span>Delete</button>' +
             '</td>';
@@ -2474,9 +2591,92 @@ $('#bucketsTbody').addEventListener('click', e => {
     if (!btn) return;
     const id = Number(btn.dataset.id);
     if (btn.dataset.act === 'open') openBucket(id);
+    if (btn.dataset.act === 'lifecycle') openLifecycle(id);
+    if (btn.dataset.act === 'vis') toggleVisibility(id);
     if (btn.dataset.act === 'rename') renameBucket(id);
     if (btn.dataset.act === 'delete') deleteBucket(id);
 });
+
+async function toggleVisibility(id) {
+    const b = state.buckets.find(x => x.id === id);
+    if (!b) return;
+    const makePublic = !Number(b.is_public);
+    const go = async () => {
+        const fd = new FormData();
+        fd.append('id', id);
+        fd.append('_sub', 'visibility');
+        if (makePublic) fd.append('public', '1');
+        try {
+            await api('buckets', { form: fd });
+            await loadBuckets();
+            toast(makePublic ? 'Bucket is now public - anyone can download its objects' : 'Bucket is now private', 'ok');
+        } catch (err) { toast(err.message, 'err'); }
+    };
+    if (makePublic) {
+        confirmDialog('Make bucket "' + b.name + '" PUBLIC? Anyone on the internet will be able to download its objects (GET/HEAD) without keys. Listing and uploads stay private.', 'Make public', go);
+    } else {
+        go();
+    }
+}
+
+async function openLifecycle(id) {
+    const b = state.buckets.find(x => x.id === id);
+    if (!b) return;
+    let rules = [];
+    try {
+        rules = await api('lifecycle', { method: 'GET', params: { bucket_id: id } });
+    } catch (err) { toast(err.message, 'err'); return; }
+    const render = () => {
+        const box = $('#lcRules');
+        box.innerHTML = '';
+        if (!rules.length) {
+            box.innerHTML = '<p class="muted" style="margin:0 0 8px">No rules. Everything is kept forever.</p>';
+        } else {
+            rules.forEach(r => {
+                box.insertAdjacentHTML('beforeend',
+                    '<div class="tu-row"><span>' + esc(r.prefix === '' ? '(whole bucket)' : r.prefix) + '</span>' +
+                    '<span class="muted">' + Number(r.days) + ' day(s)</span>' +
+                    '<button class="icon-btn sm" data-lcdel="' + r.id + '" title="Delete rule" aria-label="Delete rule">' + icon('trash', 15) + '</button></div>');
+            });
+        }
+    };
+    openModal(
+        '<h3>Lifecycle: ' + esc(b.username) + ' / ' + esc(b.name) + '</h3>' +
+        '<p class="muted">Objects older than the given days are <strong>permanently deleted</strong> (this bypasses Trash) the next time the bucket is listed. Prefix empty = whole bucket.</p>' +
+        '<div id="lcRules"></div>' +
+        '<form id="lcForm">' +
+        '<div class="tf"><input name="prefix" placeholder=" " autocomplete="off"><label>Prefix, e.g. tmp/ (empty = all)</label></div>' +
+        '<div class="tf" style="max-width:220px"><input name="days" type="number" min="1" max="3650" required placeholder=" "><label>Delete after (days)</label></div>' +
+        '<div class="modal-actions"><button type="submit" class="btn btn-filled">Add rule</button><button type="button" class="btn btn-text" data-close>Done</button></div>' +
+        '</form>');
+    render();
+    $('#lcRules').addEventListener('click', async e => {
+        const btn = e.target.closest('[data-lcdel]');
+        if (!btn) return;
+        const fd = new FormData();
+        fd.append('_sub', 'delete');
+        fd.append('id', btn.dataset.lcdel);
+        try {
+            await api('lifecycle', { form: fd });
+            rules = rules.filter(r => String(r.id) !== String(btn.dataset.lcdel));
+            render();
+            await loadBuckets();
+        } catch (err) { toast(err.message, 'err'); }
+    });
+    $('#lcForm').onsubmit = async ev => {
+        ev.preventDefault();
+        const fd = new FormData($('#lcForm'));
+        fd.append('_sub', 'add');
+        fd.append('bucket_id', id);
+        try {
+            await api('lifecycle', { form: fd });
+            rules = await api('lifecycle', { method: 'GET', params: { bucket_id: id } });
+            render();
+            await loadBuckets();
+            toast('Lifecycle rule saved', 'ok');
+        } catch (err) { toast(err.message, 'err'); }
+    };
+}
 
 function renameBucket(id) {
     const b = state.buckets.find(x => x.id === id);
@@ -2660,7 +2860,7 @@ function renderFiles() {
             const full = state.prefix + f;
             visibleKeys.push(full);
             tb.insertAdjacentHTML('beforeend',
-                '<tr class="dir' + (state.sel.has(full) ? ' sel' : '') + '"><td><input type="checkbox" class="rowcheck" data-key="' + esc(full) + '"' + (state.sel.has(full) ? ' checked' : '') + '></td>' +
+                '<tr class="dir' + (state.sel.has(full) ? ' sel' : '') + '" draggable="true" data-key="' + esc(full) + '"><td><input type="checkbox" class="rowcheck" data-key="' + esc(full) + '"' + (state.sel.has(full) ? ' checked' : '') + '></td>' +
                 '<td><button class="link" data-folder="' + esc(full) + '"><span class="cellname">' + fileIcon(full) + '<span class="nm">' + esc(f.replace(/\/$/, '')) + '/</span></span></button></td><td></td><td></td>' +
                 '<td class="muted">folder</td>' +
                 '<td class="actions"><button class="icon-btn sm" data-menu="' + esc(full) + '" title="More actions" aria-label="More actions">' + icon('more', 18) + '</button></td></tr>');
@@ -2669,7 +2869,7 @@ function renderFiles() {
             const name = o.key.slice(state.prefix.length);
             visibleKeys.push(o.key);
             tb.insertAdjacentHTML('beforeend',
-                '<tr data-key="' + esc(o.key) + '"' + (state.sel.has(o.key) ? ' class="sel"' : '') + '>' +
+                '<tr draggable="true" data-key="' + esc(o.key) + '"' + (state.sel.has(o.key) ? ' class="sel"' : '') + '>' +
                 '<td><input type="checkbox" class="rowcheck" data-key="' + esc(o.key) + '"' + (state.sel.has(o.key) ? ' checked' : '') + '></td>' +
                 '<td><span class="cellname">' + fileIcon(o.key) + '<span class="nm" title="' + esc(name) + '">' + esc(name) + '</span></span></td>' +
                 '<td class="muted">' + esc(fmtBytes(o.size)) + '</td>' +
@@ -2695,7 +2895,7 @@ function renderFiles() {
             const full = state.prefix + f;
             visibleKeys.push(full);
             grid.insertAdjacentHTML('beforeend',
-                '<div class="gcard' + (state.sel.has(full) ? ' sel' : '') + '" data-key="' + esc(full) + '" data-folder="' + esc(full) + '">' +
+                '<div class="gcard' + (state.sel.has(full) ? ' sel' : '') + '" draggable="true" data-key="' + esc(full) + '" data-folder="' + esc(full) + '">' +
                 '<div class="gthumb folder">' + icon('folder') + '</div>' +
                 '<div class="gname" title="' + esc(full) + '">' + esc(f.replace(/\/$/, '')) + '</div><div class="gsub">folder</div></div>');
         });
@@ -2707,7 +2907,7 @@ function renderFiles() {
                 ? '<div class="gthumb"><img loading="lazy" src="api.php?action=download_object&bucket_id=' + state.bucketId + '&key=' + encodeURIComponent(o.key) + '&inline=1" alt=""></div>'
                 : '<div class="gthumb">' + fileIcon(o.key).replace('<span class="ficon', '<span class="ficon" style="width:36px;height:36px" ') + '</div>';
             grid.insertAdjacentHTML('beforeend',
-                '<div class="gcard' + (state.sel.has(o.key) ? ' sel' : '') + '" data-key="' + esc(o.key) + '" data-info="' + esc(o.key) + '">' +
+                '<div class="gcard' + (state.sel.has(o.key) ? ' sel' : '') + '" draggable="true" data-key="' + esc(o.key) + '" data-info="' + esc(o.key) + '">' +
                 thumb +
                 '<div class="gname" title="' + esc(name) + '">' + esc(name) + '</div>' +
                 '<div class="gsub" title="' + esc(fmtTime(o.last_modified)) + '">' + esc(fmtBytes(o.size)) + ' · ' + esc(fmtRel(o.last_modified)) + '</div></div>');
@@ -3339,6 +3539,74 @@ $('#uploadInput').addEventListener('change', () => {
     $('#uploadInput').value = '';
     if (files.length) openUploadModal(files);
 });
+$('#uploadFolderBtn').addEventListener('click', () => $('#uploadFolderInput').click());
+$('#uploadFolderInput').addEventListener('change', () => {
+    const picked = [...$('#uploadFolderInput').files];
+    $('#uploadFolderInput').value = '';
+    if (!picked.length) return;
+    const files = [];
+    let skipped = 0;
+    picked.forEach(f => {
+        const rel = String(f.webkitRelativePath || f.name);
+        const parts = rel.split('/');
+        parts.pop();
+        const clean = parts.filter(p => p !== '' && p !== '.' && p !== '..');
+        if (clean.length !== parts.filter(p => p !== '').length) { skipped++; return; }
+        if (clean.length) f._relPath = clean.join('/');
+        files.push(f);
+    });
+    if (!files.length) { toast('No uploadable files in that folder', 'err'); return; }
+    if (skipped) toast(skipped + ' file(s) skipped (unsafe paths)', 'err');
+    openUploadModal(files);
+});
+const uploadKey = f => state.prefix + (f._relPath ? f._relPath + '/' : '') + f.name;
+
+/* drag rows onto folders to move them */
+function dropTarget(el) {
+    if (!el) return null;
+    const folder = el.closest('[data-folder]');
+    if (folder) return folder.dataset.folder;
+    const crumb = el.closest('#pathbar .crumb');
+    if (crumb) return crumb.dataset.prefix;
+    return null;
+}
+$('#filesView').addEventListener('dragstart', e => {
+    const src = e.target.closest('tr[data-key],.gcard[data-key]');
+    if (!src || !src.dataset.key) return;
+    e.dataTransfer.setData('text/s3key', src.dataset.key);
+    e.dataTransfer.effectAllowed = 'move';
+});
+$('#filesView').addEventListener('dragover', e => {
+    if (!e.dataTransfer || ![...e.dataTransfer.types].includes('text/s3key')) return;
+    const t = dropTarget(e.target);
+    if (t === null) return;
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+    $$('#filesView .drover').forEach(x => x.classList.remove('drover'));
+    const box = e.target.closest('[data-folder],#pathbar .crumb');
+    if (box) box.classList.add('drover');
+});
+$('#filesView').addEventListener('dragleave', e => {
+    if (e.target.classList && e.target.classList.contains('drover')) e.target.classList.remove('drover');
+});
+$('#filesView').addEventListener('drop', async e => {
+    $$('#filesView .drover').forEach(x => x.classList.remove('drover'));
+    const key = e.dataTransfer ? e.dataTransfer.getData('text/s3key') : '';
+    const dest = dropTarget(e.target);
+    if (!key || dest === null) return;
+    e.preventDefault();
+    const parent = key.includes('/') ? key.slice(0, key.lastIndexOf('/') + 1) : '';
+    if (dest === parent || dest === key) { toast('Already in that folder', 'err'); return; }
+    try {
+        const d = await api('objects', { json: { _sub: 'move', bucket_id: state.bucketId, keys: [key], src_prefix: '', dest_prefix: dest, overwrite: false } });
+        toast('Moved ' + d.copied + ' object(s)', 'ok');
+        await loadFiles();
+    } catch (err) {
+        let msg = err.message;
+        if (err.data && err.data.conflicts && err.data.conflicts.length) msg += ' (exists - use bulk move with overwrite)';
+        toast(msg, 'err');
+    }
+});
 
 function openUploadModal(files) {
     const totalBytes = () => files.reduce((s, f) => s + f.size, 0);
@@ -3349,7 +3617,7 @@ function openUploadModal(files) {
             const row = document.createElement('div');
             row.className = 'upload-row';
             row.innerHTML = '<span style="color:var(--on-surface-var)">' + icon('file', 18) + '</span>' +
-                '<span class="upload-name">' + esc(f.name) + '</span>' +
+                '<span class="upload-name" title="' + esc(uploadKey(f)) + '">' + esc((f._relPath ? f._relPath + '/' : '') + f.name) + '</span>' +
                 '<span class="muted" style="white-space:nowrap">' + esc(fmtBytes(f.size)) + '</span>' +
                 '<span class="upload-state" id="us' + i + '"></span>';
             list.appendChild(row);
@@ -3379,7 +3647,7 @@ function openUploadModal(files) {
         $('#uploadStartBtn').disabled = conflicts.length > 0 && !$('#overwriteChk').checked;
     };
     const refreshConflicts = async () => {
-        const keys = files.map(f => state.prefix + f.name);
+        const keys = files.map(f => uploadKey(f));
         $('#uploadStartBtn').disabled = true;
         try {
             const d = await api('object_conflicts', { method: 'GET', params: { bucket_id: state.bucketId, keys: JSON.stringify(keys) } });
@@ -3399,7 +3667,7 @@ function openUploadModal(files) {
         const cset = new Set(conflicts.map(c => c.key));
         files.forEach((f, i) => {
             const stEl = $('#us' + i);
-            if (cset.has(state.prefix + f.name)) {
+            if (cset.has(uploadKey(f))) {
                 stEl.textContent = 'exists';
                 stEl.className = 'upload-state warn';
             } else if (stEl.textContent === 'exists') {
@@ -3436,7 +3704,7 @@ function openUploadModal(files) {
             st.className = 'upload-state';
             await new Promise(resolve => {
                 const xhr = new XMLHttpRequest();
-                xhr.open('POST', 'api.php?action=objects&_sub=upload&bucket_id=' + state.bucketId + '&prefix=' + encodeURIComponent(state.prefix) + '&name=' + encodeURIComponent(f.name));
+                xhr.open('POST', 'api.php?action=objects&_sub=upload&bucket_id=' + state.bucketId + '&prefix=' + encodeURIComponent(state.prefix) + '&path=' + encodeURIComponent(f._relPath || '') + '&name=' + encodeURIComponent(f.name));
                 if (state.csrf) xhr.setRequestHeader('X-CSRF-Token', state.csrf);
                 xhr.setRequestHeader('Content-Type', f.type || 'application/octet-stream');
                 xhr.upload.onprogress = e => {
@@ -3981,15 +4249,40 @@ $('#saveLogsBtn').addEventListener('click', async () => {
     const fd = new FormData();
     if ($('#logS3').checked) fd.append('log_s3', '1');
     if ($('#logAdmin').checked) fd.append('log_admin', '1');
+    fd.append('log_days', String(Math.max(0, Number($('#logDays').value) || 0)));
     try {
         const d = await api('update_logs', { form: fd });
         applyLogSettings(d.log_s3, d.log_admin);
+        if (d.log_days !== undefined) $('#logDays').value = Number(d.log_days);
         toast('Log settings saved', 'ok');
     } catch (e) {
         err.textContent = e.message;
         err.classList.remove('hidden');
     }
 });
+
+/* password strength meter (also used by install/reset pages) */
+function pwScore(pw) {
+    pw = String(pw || '');
+    if (!pw) return { pct: 0, label: '' };
+    const lower = /[a-z]/.test(pw), upper = /[A-Z]/.test(pw);
+    const digit = /[0-9]/.test(pw), sym = /[^A-Za-z0-9]/.test(pw);
+    const classes = (lower ? 1 : 0) + (upper ? 1 : 0) + (digit ? 1 : 0) + (sym ? 1 : 0);
+    let pts = Math.min(40, pw.length * 3) + classes * 12;
+    if (/^(password|admin|minis3|12345678|qwerty|letmein|welcome).*/i.test(pw)) pts = Math.min(pts, 15);
+    const pct = Math.max(4, Math.min(100, Math.round(pts)));
+    const label = pct < 35 ? 'Weak' : (pct < 65 ? 'Fair' : (pct < 85 ? 'Good' : 'Strong'));
+    return { pct, label };
+}
+function pwMeterPaint(input, meter, hint) {
+    const s = pwScore(input.value);
+    const bar = meter.querySelector('div');
+    bar.style.width = s.pct + '%';
+    bar.className = s.pct < 35 ? 'weak' : (s.pct < 65 ? 'fair' : (s.pct < 85 ? 'good' : 'strong'));
+    if (hint && input.value) hint.textContent = 'Strength: ' + s.label + (input.value.length < 12 ? ' - aim for 12+ characters.' : '');
+    else if (hint) hint.textContent = 'Use 12+ characters with mixed case, digits and symbols.';
+}
+$('#pwNew').addEventListener('input', e => pwMeterPaint(e.target, $('#pwMeter'), $('#pwHint')));
 
 $('#profileForm').addEventListener('submit', async ev => {
     ev.preventDefault();

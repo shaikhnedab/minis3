@@ -46,7 +46,14 @@ Contents: [Features](#features) · [Requirements](#requirements) ·
 - **Per-user storage quotas** (MB per user, enforced on PUTs, multipart
   completion and panel uploads with `QuotaExceeded`).
 - **Disable users** without deleting anything: keys stop working immediately
-  (header auth and presigned URLs), buckets and files are kept.
+  (header auth and presigned URLs), buckets and files are kept. Access keys
+  can also be regenerated independently of secrets.
+- **Lifecycle rules** per bucket: auto-expire objects by prefix after N days
+  (permanent, enforced lazily on every bucket listing - no cron needed).
+- **Public buckets**: panel toggle serves object GET/HEAD without keys
+  (listing and uploads stay private); anonymous misses still 404.
+- `GET /health` public JSON health check (`ok`, `version`, `disk_free_bytes`,
+  `db`), never logged - point uptime monitors at it instead of S3 paths.
 - Empty-object folder markers (`keys ending in /`, as created by WinSCP /
   FolderSync) list as folders and follow move/copy/rename/delete.
 - Storage layout: `data/users/{username}/{bucket}/{key...}`.
@@ -61,12 +68,12 @@ objects), keyboard shortcuts (`/` focuses key search, `u` uploads).
 
 | Tab       | What you can do |
 |-----------|-----------------|
-| Dashboard | Usage stats, 24h / 7d / 30d request chart with previous-period deltas, status distribution with error delta, clickable stat cards, top users (click to filter), recent activity with one-click "view in logs" |
-| Users     | Add / edit / delete, search, per-user storage bars + quotas, 14-day request sparklines, last-active column, disable / enable toggle, per-key copy buttons, masked secret with reveal, secret regeneration |
-| Buckets   | Add / rename / type-to-confirm delete, per-bucket object count + size; file browser with list/grid views, image thumbnails, search, sort, multi-select bulk copy/move/delete, new folder/file, upload (button, drag & drop, paste) with progress, inline image/video/audio/PDF preview, text editor (512 KB), object details (ETag, type, meta), presigned share links with expiry picker, folder/bucket ZIP download |
-| Logs      | Every request with user/kind/method/status filters + search, slow-request highlighting, live-tail mode, one-click CSV export of the filtered view, slow-request highlighting, clear |
+| Dashboard | Usage stats, 24h / 7d / 30d request chart with previous-period deltas, status distribution with error delta, clickable stat cards, top users (click to filter), recent activity with one-click "view in logs", server-health panel (PHP/SQLite versions, disk, DB size, log span) |
+| Users     | Add / edit / delete, search, per-user detail drawer (buckets, recent requests), storage bars + quotas, 14-day request sparklines, last-active column, disable / enable toggle, per-key copy buttons, masked secret with reveal, secret + access-key regeneration |
+| Buckets   | Add / rename / type-to-confirm delete, public/private toggle, lifecycle rules, per-bucket object count + size; file browser with list/grid views, image thumbnails, search, sort, multi-select bulk copy/move/delete, new folder/file, upload (button, folder upload, drag & drop, paste) with progress, drag rows onto folders to move, inline image/video/audio/PDF preview, text editor (512 KB), object details (ETag, type, meta), presigned share links with expiry picker, folder/bucket ZIP download |
+| Logs      | Every request with user/kind/method/status filters + search, slow-request highlighting, live-tail mode, one-click CSV export of the filtered view, clear, configurable retention (auto-prune) |
 | Trash     | Soft-deleted files with retention badges, restore preview (original path, size, purge date), restore / purge / empty; retention days in Settings |
-| Settings  | Connect card (endpoint, region, copy-paste AWS CLI + rclone snippets per user), backup export/import (JSON), session revocation, branding (app name + favicon), logging toggles, admin account, password, trash retention, TOTP 2FA, passkeys, multipart-upload manager |
+| Settings  | Connect card (endpoint, region, copy-paste AWS CLI + rclone snippets per user), backup export/import (JSON), last sign-in + session revocation, branding (app name + favicon), logging toggles, log retention, admin account, password (with strength meter), trash retention, TOTP 2FA, passkeys, multipart-upload manager |
 
 ## Requirements
 
@@ -82,8 +89,12 @@ objects), keyboard shortcuts (`/` focuses key search, `u` uploads).
 
 1. Upload the whole `minis3/` folder to your web root and point a subdomain
    or subfolder at it, e.g. `https://s3.example.com/`.
-2. Open `https://s3.example.com/install.php`, set the admin username and
-   password, then **delete `install.php` from the server**.
+2. Open `https://s3.example.com/install.php`. It starts with a **server
+   preflight** (PHP version, extensions, `php.ini` limits, `data/`
+   writability, disk space) with per-item DirectAdmin/SSH fixes and a
+   Re-check button - clear any red rows first. Then set the admin username
+   and password (strength meter included), and **delete `install.php` from
+   the server**.
 3. Open `/admin/`, sign in, add an S3 user on the **Users** tab. Copy the
    access key and secret key (or use the **Settings → Connect** card, which
    prints ready-to-paste `aws` / `rclone` configs).
@@ -96,13 +107,28 @@ PHP needs write access to `data/` (0775 or 0770) for files and the database.
   files; the `.htaccess` does the equivalent on Apache and also blocks
   `data/`, `lib/` and `config.php`).
 
-### Local development
+### Local development and CI
 
 ```bash
 php -S 127.0.0.1:8000 router.php
 php tests/smoke.php                      # fresh install + user + full suite (48 checks)
 S3_ACCESS_KEY=... S3_SECRET_KEY=... php tests/smoke.php   # against existing keys (46 checks)
 ```
+
+Pushes run the same suite on PHP 7.4–8.5 via `.github/workflows/ci.yml`
+(lint + fresh-install + existing-keys runs).
+
+### Docker
+
+Alpine-based single image (nginx + PHP-FPM under supervisor, plain HTTP):
+
+```bash
+docker compose up --build -d   # serves :8080, ./data persisted
+# or: docker build -t minis3 . && docker run -p 8080:80 -v ./data:/var/www/html/data minis3
+```
+
+Then open `http://localhost:8080/install.php`. Ensure the host `./data`
+directory is writable by www-data (uid 33) inside the container.
 
 On Windows run the same inside WSL, or use the Windows nginx + php-cgi
 stack: `start-dev.ps1` serves http://127.0.0.1:8765 (`stop-dev.ps1` stops
@@ -173,6 +199,8 @@ Same-origin JSON API at `/admin/api.php?action=…`, session cookie plus
 | `users`, `buckets`, `objects`, `trash`, `uploads`, `logs`, `stats` | List + manage; `logs` accepts `user_id/kind/method/status/q` filters; `stats` accepts `range=24h\|7d\|30d` and returns previous-period deltas |
 | `logs_export` | Download the filtered log view as CSV (cap 10k rows) |
 | `search_all?q=` | Capped user / bucket / object search backing `Ctrl+K` |
+| `lifecycle` | List/add/delete per-bucket auto-expiry rules (prefix + days) |
+| `server_info` | PHP/SQLite versions, disk + data-dir + DB sizes, counts, log span |
 | `backup_export` / `backup_import` | JSON with users (incl. keys), buckets and panel settings; import recreates missing entries and reports `{users_created, buckets_created, skipped}` |
 | `revoke_sessions` | Invalidate every admin session except the current one |
 | `update_settings`, `update_profile`, `change_password`, `update_logs` | Panel preferences, admin renames/password |
@@ -216,13 +244,14 @@ calls get 401; revoked sessions get 401 with "Session revoked".
 
 - Signature V4 (header auth **and** presigned URLs for GET, HEAD, PUT,
   DELETE); no versioning; no bucket policies or object tagging (those
-  sub-resources return 501 or a stub).
+  sub-resources return 501 or a stub). Full matrix: `docs/COMPATIBILITY.md`.
 - Bucket names follow S3 rules (3–63 chars, lowercase, digits, dots,
   hyphens) and are namespaced per user.
 - Object keys with `.` / `..` segments are rejected; keys ending in `/` are
   empty-folder markers.
 - Reserved bucket names: `admin`, `data`, `lib`, `tests`, `tools`,
-  `config.php`, `index.php`, `install.php`, `reset.php`.
+  `config.php`, `health`, `index.php`, `install.php`, `reset.php` (`/health`
+  is the public health endpoint).
 - Size limits come from PHP (`max_execution_time`) and the web server
   (`client_max_body_size` on nginx). S3 PUTs and admin uploads stream to
   disk, so `upload_max_filesize` / `post_max_size` do not apply; only the

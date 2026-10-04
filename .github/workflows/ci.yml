@@ -1,0 +1,62 @@
+name: CI
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  lint:
+    name: PHP syntax
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.2'
+      - name: Lint all PHP files
+        run: |
+          fail=0
+          for f in $(git ls-files '*.php'); do
+            php -l "$f" > /dev/null || fail=1
+          done
+          exit $fail
+
+  smoke:
+    name: Smoke (${{ matrix.php }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        php: ['7.4', '8.0', '8.1', '8.2', '8.3', '8.4', '8.5']
+    steps:
+      - uses: actions/checkout@v4
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: ${{ matrix.php }}
+          extensions: pdo_sqlite, simplexml, openssl, mbstring, fileinfo
+      - name: Start dev server
+        run: |
+          mkdir -p data
+          php -S 127.0.0.1:8000 router.php > /tmp/php-server.log 2>&1 &
+          for i in $(seq 1 30); do
+            curl -sf http://127.0.0.1:8000/admin/ > /dev/null && break
+            sleep 1
+          done
+          curl -sf http://127.0.0.1:8000/admin/ > /dev/null
+      - name: Fresh-install smoke run
+        env:
+          S3_ENDPOINT: http://127.0.0.1:8000
+          S3_ADMIN_PASSWORD: ci-admin-12345
+        run: php tests/smoke.php
+      - name: Existing-keys smoke run
+        env:
+          S3_ENDPOINT: http://127.0.0.1:8000
+        run: |
+          CSRF=$(curl -s -c /tmp/cj.txt -b /tmp/cj.txt -X POST "http://127.0.0.1:8000/admin/api.php?action=login" --data-urlencode "username=admin" --data-urlencode "password=ci-admin-12345" | php -r '$d=json_decode(stream_get_contents(STDIN),true);echo $d["data"]["csrf"];')
+          KEYS=$(curl -s -b /tmp/cj.txt -X POST "http://127.0.0.1:8000/admin/api.php?action=users" -H "X-CSRF-Token: $CSRF" --data-urlencode "_sub=create" --data-urlencode "username=ci-user" --data-urlencode "access_key=AKIACI1234567890AB" --data-urlencode "secret_key=ci-secret-1234567890abcdef" | php -r '$d=json_decode(stream_get_contents(STDIN),true);echo $d["data"]["access_key"]." ".$d["data"]["secret_key"];')
+          S3_ACCESS_KEY=$(echo "$KEYS" | cut -d' ' -f1) S3_SECRET_KEY=$(echo "$KEYS" | cut -d' ' -f2) php tests/smoke.php
+      - name: Server log on failure
+        if: failure()
+        run: cat /tmp/php-server.log

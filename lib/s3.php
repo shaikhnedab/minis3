@@ -123,6 +123,90 @@ function s3_object_require(?array $o): void
     }
 }
 
+// Resolves an unauthenticated object GET/HEAD against public buckets.
+// Returns [ownerUser, bucketRow, key] when exactly one public bucket with
+// that name exists (and its owner is active), otherwise null. Only plain
+// object reads qualify: any subresource query (?acl, ?uploads, …) falls back
+// to authenticated routing. Note this shadows a private bucket that shares
+// its name with a public one - keep public bucket names unique.
+function s3_public_object(string $method, string $path, array $query): ?array
+{
+    if ($method !== 'GET' && $method !== 'HEAD') {
+        return null;
+    }
+    if ($query !== []) {
+        return null;
+    }
+    $path = ltrim($path, '/');
+    $parts = explode('/', $path);
+    $bucket = array_shift($parts);
+    if (!s3_bucket_name_valid($bucket)) {
+        return null;
+    }
+    if (count($parts) === 1 && $parts[0] === '') {
+        $parts = [];
+    }
+    if (count($parts) === 0) {
+        return null;
+    }
+    $key = implode('/', $parts);
+    if (!s3_key_valid($key)) {
+        return null;
+    }
+    $st = db()->prepare('SELECT b.* FROM buckets b WHERE b.name = ? AND b.is_public = 1');
+    $st->execute([$bucket]);
+    $matches = $st->fetchAll();
+    if (count($matches) !== 1) {
+        return null;
+    }
+    $b = $matches[0];
+    $user = db_find_user((int)$b['user_id']);
+    if ($user === null || !empty($user['disabled'])) {
+        return null;
+    }
+    return [$user, $b, $key];
+}
+
+// Permanently deletes objects past their lifecycle retention. Runs lazily
+// whenever a bucket is listed (S3 or admin), so expiry needs no cron.
+// Unlike trash, lifecycle expiry is final - this is documented in the UI.
+function lifecycle_enforce_bucket(int $bucketId): void
+{
+    $st = db()->prepare('SELECT prefix, days FROM lifecycle_rules WHERE bucket_id = ?');
+    $st->execute([$bucketId]);
+    $rules = $st->fetchAll();
+    if (!$rules) {
+        return;
+    }
+    $b = db_find_bucket($bucketId);
+    if ($b === null) {
+        return;
+    }
+    $user = db_find_user((int)$b['user_id']);
+    if ($user === null) {
+        return;
+    }
+    foreach ($rules as $r) {
+        $days = max(1, (int)$r['days']);
+        $prefix = (string)$r['prefix'];
+        $sql = 'SELECT * FROM objects WHERE bucket_id = ? AND last_modified <= datetime("now", ?)';
+        $args = [$bucketId, "-$days days"];
+        if ($prefix !== '') {
+            $sql .= ' AND key LIKE ? ESCAPE "\\"';
+            $args[] = s3_escape_like($prefix) . '%';
+        }
+        $st = db()->prepare($sql);
+        $st->execute($args);
+        foreach ($st->fetchAll() as $o) {
+            $p = s3_object_path($user['username'], $b['name'], $o['key']);
+            if (is_file($p)) {
+                @unlink($p);
+            }
+            db()->prepare('DELETE FROM objects WHERE id = ?')->execute([$o['id']]);
+        }
+    }
+}
+
 function s3_bucket_route(string $method, string $bucket, array $q, array $user, array $ctx): void
 {
     $b = db_find_bucket_by_name($user['id'], $bucket);
@@ -451,6 +535,7 @@ function s3_content_xml(array $c, array $user, bool $urlEncode = false): string
 function s3_list_objects_v1(array $user, string $bucket, ?array $b, array $q, array $ctx): void
 {
     s3_bucket_require($b, $bucket);
+    lifecycle_enforce_bucket((int)$b['id']);
     $prefix = $q['prefix'] ?? '';
     $delimiter = $q['delimiter'] ?? '';
     $marker = $q['marker'] ?? '';
@@ -480,6 +565,7 @@ function s3_list_objects_v1(array $user, string $bucket, ?array $b, array $q, ar
 function s3_list_objects_v2(array $user, string $bucket, ?array $b, array $q, array $ctx): void
 {
     s3_bucket_require($b, $bucket);
+    lifecycle_enforce_bucket((int)$b['id']);
     $prefix = $q['prefix'] ?? '';
     $delimiter = $q['delimiter'] ?? '';
     $startAfter = $q['start-after'] ?? '';

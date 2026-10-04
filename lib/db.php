@@ -113,6 +113,15 @@ function db_init(): void
     if (!in_array('session_ver', $colNames, true)) {
         $pdo->exec('ALTER TABLE admin ADD COLUMN session_ver INTEGER NOT NULL DEFAULT 1');
     }
+    if (!in_array('log_days', $colNames, true)) {
+        $pdo->exec('ALTER TABLE admin ADD COLUMN log_days INTEGER NOT NULL DEFAULT 0');
+    }
+    if (!in_array('last_login_at', $colNames, true)) {
+        $pdo->exec('ALTER TABLE admin ADD COLUMN last_login_at TEXT');
+    }
+    if (!in_array('last_login_ip', $colNames, true)) {
+        $pdo->exec('ALTER TABLE admin ADD COLUMN last_login_ip TEXT');
+    }
     // Admin passkeys (WebAuthn / passwordless login).
     $pdo->exec('CREATE TABLE IF NOT EXISTS admin_passkeys (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -136,6 +145,24 @@ function db_init(): void
     if (!in_array('disabled', $userColNames, true)) {
         $pdo->exec('ALTER TABLE users ADD COLUMN disabled INTEGER NOT NULL DEFAULT 0');
     }
+    // Public buckets (unauthenticated object GET/HEAD) and lifecycle rules
+    // (auto-expire objects by prefix after N days).
+    $bucketCols = $pdo->query('PRAGMA table_info(buckets)')->fetchAll();
+    $bucketColNames = [];
+    foreach ($bucketCols as $c) {
+        $bucketColNames[] = $c['name'];
+    }
+    if (!in_array('is_public', $bucketColNames, true)) {
+        $pdo->exec('ALTER TABLE buckets ADD COLUMN is_public INTEGER NOT NULL DEFAULT 0');
+    }
+    $pdo->exec('CREATE TABLE IF NOT EXISTS lifecycle_rules (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        bucket_id INTEGER NOT NULL REFERENCES buckets(id) ON DELETE CASCADE,
+        prefix TEXT NOT NULL DEFAULT "",
+        days INTEGER NOT NULL,
+        UNIQUE(bucket_id, prefix)
+    )');
+    $pdo->exec('CREATE INDEX IF NOT EXISTS idx_lifecycle_bucket ON lifecycle_rules(bucket_id)');
     // Soft-deleted objects (admin UI) waiting for restore / expiry.
     $pdo->exec('CREATE TABLE IF NOT EXISTS trash (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
