@@ -18,7 +18,8 @@ RUN rm -f /etc/nginx/http.d/default.conf \
  && mkdir -p /run/nginx /var/log/supervisor
 
 COPY . /var/www/html/
-RUN chown -R www-data:www-data /var/www/html \
+RUN mkdir -p /var/www/html/data \
+ && chown -R www-data:www-data /var/www/html \
  && chmod 770 /var/www/html/data
 
 EXPOSE 80

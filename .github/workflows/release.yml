@@ -41,14 +41,14 @@ jobs:
           unzip -l "$NAME.zip" | grep -c -E "\.github/|/tests/|/data/app" || echo "clean"
       - name: Create release if missing
         run: |
-          gh release view "${GITHUB_REF_NAME}" > /dev/null 2>&1 || \
-            gh release create "${GITHUB_REF_NAME}" --title "MiniS3 ${GITHUB_REF_NAME}" \
+          gh release view "${GITHUB_REF_NAME}" --repo "$GITHUB_REPOSITORY" > /dev/null 2>&1 || \
+            gh release create "${GITHUB_REF_NAME}" --repo "$GITHUB_REPOSITORY" --title "MiniS3 ${GITHUB_REF_NAME}" \
               --notes "Clean deploy package attached (runtime files only, no CI workflows or tests). Full source zip also available below."
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       - name: Upload assets
         run: |
           cd /tmp
-          gh release upload "${GITHUB_REF_NAME}" "minis3-${GITHUB_REF_NAME}.zip" "minis3-${GITHUB_REF_NAME}.tar.gz" --clobber
+          gh release upload "${GITHUB_REF_NAME}" --repo "$GITHUB_REPOSITORY" "minis3-${GITHUB_REF_NAME}.zip" "minis3-${GITHUB_REF_NAME}.tar.gz" --clobber
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
