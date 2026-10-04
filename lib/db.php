@@ -163,6 +163,19 @@ function db_init(): void
         UNIQUE(bucket_id, prefix)
     )');
     $pdo->exec('CREATE INDEX IF NOT EXISTS idx_lifecycle_bucket ON lifecycle_rules(bucket_id)');
+    // Never-expiring (or long-lived) share links: unguessable tokens mapped
+    // to one object. Unlike SigV4 presigned URLs these have no 7-day cap.
+    $pdo->exec('CREATE TABLE IF NOT EXISTS share_tokens (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        token TEXT NOT NULL UNIQUE,
+        user_id INTEGER NOT NULL,
+        bucket_id INTEGER NOT NULL,
+        key TEXT NOT NULL,
+        created_at TEXT NOT NULL,
+        expires_at TEXT
+    )');
+    $pdo->exec('CREATE INDEX IF NOT EXISTS idx_share_token ON share_tokens(token)');
+    $pdo->exec('CREATE INDEX IF NOT EXISTS idx_share_object ON share_tokens(bucket_id, key)');
     // Soft-deleted objects (admin UI) waiting for restore / expiry.
     $pdo->exec('CREATE TABLE IF NOT EXISTS trash (
         id INTEGER PRIMARY KEY AUTOINCREMENT,

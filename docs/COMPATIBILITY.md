@@ -49,6 +49,7 @@ falls through to `405 MethodNotAllowed` or `400 InvalidArgument`.
 ## MiniS3 extensions (beyond S3)
 
 - `GET /health` — public JSON health check (`ok`, `version`, `time`, `disk_free_bytes`, `db`), never logged.
+- `GET /share/<token>` — revocable token download links (optional expiry), no login; 404 when revoked/missing, 403 when expired or owner disabled.
 - `GET /favicon.ico` — panel favicon, never logged.
 - `POST ?delete` semantics match AWS; empty-folder keys (`…/`) behave like WinSCP/FolderSync markers.
 - Admin panel + JSON API under `/admin/` (see README "Admin API").

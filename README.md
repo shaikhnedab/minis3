@@ -54,6 +54,10 @@ Contents: [Features](#features) · [Requirements](#requirements) ·
   (listing and uploads stay private); anonymous misses still 404.
 - `GET /health` public JSON health check (`ok`, `version`, `disk_free_bytes`,
   `db`), never logged - point uptime monitors at it instead of S3 paths.
+- Share links: signed URLs (up to 7 days, expire automatically) plus
+  revocable token links (`/share/<token>`, 30 days or never-expire) managed
+  per object in the panel; tokens die with the file/user/bucket and survive
+  renames.
 - Empty-object folder markers (`keys ending in /`, as created by WinSCP /
   FolderSync) list as folders and follow move/copy/rename/delete.
 - Storage layout: `data/users/{username}/{bucket}/{key...}`.
@@ -70,7 +74,7 @@ objects), keyboard shortcuts (`/` focuses key search, `u` uploads).
 |-----------|-----------------|
 | Dashboard | Usage stats, 24h / 7d / 30d request chart with previous-period deltas, status distribution with error delta, clickable stat cards, top users (click to filter), recent activity with one-click "view in logs", server-health panel (PHP/SQLite versions, disk, DB size, log span) |
 | Users     | Add / edit / delete, search, per-user detail drawer (buckets, recent requests), storage bars + quotas, 14-day request sparklines, last-active column, disable / enable toggle, per-key copy buttons, masked secret with reveal, secret + access-key regeneration |
-| Buckets   | Add / rename / type-to-confirm delete, public/private toggle, lifecycle rules, per-bucket object count + size; file browser with list/grid views, image thumbnails, search, sort, multi-select bulk copy/move/delete, new folder/file, upload (button, folder upload, drag & drop, paste) with progress, drag rows onto folders to move, inline image/video/audio/PDF preview, text editor (512 KB), object details (ETag, type, meta), presigned share links with expiry picker, folder/bucket ZIP download |
+| Buckets   | Add / rename / type-to-confirm delete, public/private toggle, lifecycle rules, per-bucket object count + size; file browser with list/grid views, image thumbnails, search, sort, multi-select bulk copy/move/delete, new folder/file, upload (button, folder upload, drag & drop, paste) with progress, drag rows onto folders to move, inline image/video/audio/PDF preview, text editor (512 KB), object details (ETag, type, meta), share links with expiry picker (signed URLs + revocable never-expire tokens), folder/bucket ZIP download |
 | Logs      | Every request with user/kind/method/status filters + search, slow-request highlighting, live-tail mode, one-click CSV export of the filtered view, clear, configurable retention (auto-prune) |
 | Trash     | Soft-deleted files with retention badges, restore preview (original path, size, purge date), restore / purge / empty; retention days in Settings |
 | Settings  | Connect card (endpoint, region, copy-paste AWS CLI + rclone snippets per user), backup export/import (JSON), last sign-in + session revocation, branding (app name + favicon), logging toggles, log retention, admin account, password (with strength meter), trash retention, TOTP 2FA, passkeys, multipart-upload manager |
@@ -200,6 +204,7 @@ Same-origin JSON API at `/admin/api.php?action=…`, session cookie plus
 | `logs_export` | Download the filtered log view as CSV (cap 10k rows) |
 | `search_all?q=` | Capped user / bucket / object search backing `Ctrl+K` |
 | `lifecycle` | List/add/delete per-bucket auto-expiry rules (prefix + days) |
+| `shares` | Token share links: create (30 days / never), list per object, revoke |
 | `server_info` | PHP/SQLite versions, disk + data-dir + DB sizes, counts, log span |
 | `backup_export` / `backup_import` | JSON with users (incl. keys), buckets and panel settings; import recreates missing entries and reports `{users_created, buckets_created, skipped}` |
 | `revoke_sessions` | Invalidate every admin session except the current one |

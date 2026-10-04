@@ -99,6 +99,24 @@ if ($path === '/health' && ($method === 'GET' || $method === 'HEAD')) {
     exit;
 }
 
+// Token share links (/share/<token>): public download without login or
+// expiry cap. Never logged as a page view would be; the download itself is
+// logged as an S3 request attributed to the owning user.
+if (($method === 'GET' || $method === 'HEAD') && strncmp($path, '/share/', 7) === 0) {
+    try {
+        [$suser, $sb, $skey] = s3_share_token_object(substr($path, 7));
+        $ctx['user_id'] = (int)$suser['id'];
+        if ($method === 'GET') {
+            s3_get_object($suser, $sb, $skey, $ctx);
+        } else {
+            s3_head_object($suser, $sb, $skey, $ctx);
+        }
+    } catch (S3Exception $e) {
+        s3_finish(s3_error_xml($e, $path), $e->s3_status, ['Content-Type' => 'application/xml'], $ctx);
+    }
+    exit;
+}
+
 try {
     $user = s3_authenticate();
     $ctx['user_id'] = (int)$user['id'];

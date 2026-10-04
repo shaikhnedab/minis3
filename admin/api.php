@@ -583,6 +583,10 @@ function admin_route(string $method, string $action): void
             admin_lifecycle($method);
             return;
 
+        case 'shares':
+            admin_shares($method);
+            return;
+
         case 'server_info':
             if ($method !== 'GET') {
                 admin_err('Bad request', 400);
@@ -894,6 +898,8 @@ function admin_users(string $method): void
         s3_delete_tree(trash_dir() . '/' . $user['username']);
         $st = db()->prepare('DELETE FROM uploads WHERE user_id = ?');
         $st->execute([$id]);
+        $st = db()->prepare('DELETE FROM share_tokens WHERE user_id = ?');
+        $st->execute([$id]);
         $st = db()->prepare('DELETE FROM trash WHERE user_id = ?');
         $st->execute([$id]);
         $st = db()->prepare('DELETE FROM users WHERE id = ?');
@@ -989,6 +995,8 @@ function admin_buckets(string $method): void
         s3_delete_tree(s3_uploads_user_dir($user['username']) . '/' . $b['name']);
         admin_trash_purge_bucket($user['username'], $b['name']);
         $st = db()->prepare('DELETE FROM uploads WHERE bucket_id = ?');
+        $st->execute([$id]);
+        $st = db()->prepare('DELETE FROM share_tokens WHERE bucket_id = ?');
         $st->execute([$id]);
         $st = db()->prepare('DELETE FROM lifecycle_rules WHERE bucket_id = ?');
         $st->execute([$id]);
@@ -1601,6 +1609,9 @@ function admin_transfer(array $user, array $b, string $srcPrefix, array $items, 
             $st = db()->prepare('DELETE FROM objects WHERE bucket_id = ? AND key = ?');
             $st->execute([$bucketId, $srcKey]);
             $deleted++;
+            if ($mode === 'move') {
+                share_retarget($bucketId, $srcKey, $dstKey);
+            }
         }
     }
 
@@ -1920,6 +1931,82 @@ function admin_server_info(): void
     ]);
 }
 
+function admin_share_url(string $token): string
+{
+    $scheme = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https' : 'http';
+    $host = (string)($_SERVER['HTTP_HOST'] ?? 'localhost');
+    return $scheme . '://' . $host . '/share/' . $token;
+}
+
+function admin_shares(string $method): void
+{
+    admin_require_login();
+    if ($method === 'GET') {
+        $bucketId = (int)($_GET['bucket_id'] ?? 0);
+        $key = (string)($_GET['key'] ?? '');
+        $b = db_find_bucket($bucketId);
+        if ($b === null) {
+            admin_err('Bucket not found', 404);
+        }
+        $st = db()->prepare('SELECT id, token, created_at, expires_at FROM share_tokens WHERE bucket_id = ? AND key = ? ORDER BY id DESC');
+        $st->execute([$bucketId, $key]);
+        $rows = $st->fetchAll();
+        foreach ($rows as &$r) {
+            $r['url'] = admin_share_url((string)$r['token']);
+        }
+        unset($r);
+        admin_ok($rows);
+    }
+    admin_require_csrf();
+    $data = admin_post_array();
+    $sub = (string)($data['_sub'] ?? '');
+    if ($sub === 'create') {
+        $bucketId = (int)($data['bucket_id'] ?? 0);
+        $key = (string)($data['key'] ?? '');
+        $b = db_find_bucket($bucketId);
+        if ($b === null) {
+            admin_err('Bucket not found', 404);
+        }
+        $obj = db_find_object($bucketId, $key);
+        if ($obj === null || s3_is_folder_marker($key)) {
+            admin_err('Object not found', 404);
+        }
+        $expiresIn = $data['expires_in'] ?? null;
+        $expiresAt = null;
+        if ($expiresIn !== null && $expiresIn !== '' && strtolower((string)$expiresIn) !== 'never') {
+            $expiresIn = (int)$expiresIn;
+            if ($expiresIn < 60 || $expiresIn > 31536000) {
+                admin_err('Expiry must be between 1 minute and 1 year, or never.');
+            }
+            $expiresAt = gmdate('Y-m-d H:i:s', time() + $expiresIn);
+        }
+        $tries = 0;
+        $token = '';
+        $user = db_find_user((int)$b['user_id']);
+        while ($tries < 3) {
+            $tries++;
+            $token = bin2hex(random_bytes(24));
+            try {
+                $st = db()->prepare('INSERT INTO share_tokens (token, user_id, bucket_id, key, created_at, expires_at) VALUES (?,?,?,?,?,?)');
+                $st->execute([$token, (int)$b['user_id'], $bucketId, $key, gmdate('Y-m-d H:i:s'), $expiresAt]);
+                break;
+            } catch (PDOException $e) {
+                if ($e->getCode() !== '23000' || $tries >= 3) {
+                    throw $e;
+                }
+            }
+        }
+        $id = (int)db()->lastInsertId();
+        admin_ok(['id' => $id, 'url' => admin_share_url($token), 'expires_at' => $expiresAt]);
+    }
+    if ($sub === 'revoke') {
+        $id = (int)($data['id'] ?? 0);
+        db()->prepare('DELETE FROM share_tokens WHERE id = ?')->execute([$id]);
+        admin_ok();
+    }
+    admin_err('Bad request', 400);
+}
+
 function admin_stats(): void
 {
     $count = function (string $sql): int {
@@ -2034,6 +2121,7 @@ function admin_delete_object(array $user, array $b, array $obj): void
     }
     $st = db()->prepare('DELETE FROM objects WHERE id = ?');
     $st->execute([$obj['id']]);
+    share_purge_object((int)$b['id'], $key);
 }
 
 function admin_trash_purge_row(array $row): void

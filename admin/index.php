@@ -3169,32 +3169,74 @@ function openShare(key) {
     openModal(
         '<h3>Share link</h3>' +
         '<p style="overflow-wrap:anywhere">' + esc(key) + '</p>' +
-        '<p>Anyone with this link can download the file until it expires. No login required.</p>' +
+        '<p>Anyone with the link can download the file. No login required. Links up to 7 days are signed URLs; 30 days and never-expire are revocable token links.</p>' +
         '<div class="tf float"><select id="shareExpires" class="has-value">' +
-        '<option value="300">5 minutes</option>' +
-        '<option value="3600" selected>1 hour</option>' +
-        '<option value="86400">1 day</option>' +
-        '<option value="604800">7 days</option>' +
+        '<option value="300">5 minutes (signed)</option>' +
+        '<option value="3600" selected>1 hour (signed)</option>' +
+        '<option value="86400">1 day (signed)</option>' +
+        '<option value="604800">7 days (signed)</option>' +
+        '<option value="2592000">30 days (token)</option>' +
+        '<option value="never">Never expires (token)</option>' +
         '</select><label>Valid for</label><span class="tf-caret">' + icon('chevron-down', 18) + '</span></div>' +
         '<div id="shareResult"></div>' +
+        '<div id="shareLinks"></div>' +
         '<div class="modal-actions">' +
         '<button id="shareGenBtn" class="btn btn-filled"><span class="bi">' + icon('share', 16) + '</span>Generate link</button>' +
         '<button class="btn btn-text" data-close>Close</button>' +
         '</div>');
     upgradeSelect($('#shareExpires'));
+    const loadLinks = async () => {
+        let rows = [];
+        try {
+            rows = await api('shares', { method: 'GET', params: { bucket_id: state.bucketId, key } });
+        } catch (err) { return; }
+        const box = $('#shareLinks');
+        if (!box) return;
+        box.innerHTML = '';
+        if (!rows.length) return;
+        box.insertAdjacentHTML('beforeend', '<p class="muted" style="margin:12px 0 6px">Active token links (revocable)</p>');
+        rows.forEach(r => {
+            box.insertAdjacentHTML('beforeend',
+                '<div class="tu-row"><span class="mono" style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="' + esc(r.url) + '">' + esc(r.url) + '</span>' +
+                '<span class="muted">' + esc(r.expires_at ? 'expires ' + fmtRel(r.expires_at) : 'never') + '</span>' +
+                '<button class="icon-btn sm" data-revoke="' + r.id + '" title="Revoke link" aria-label="Revoke link">' + icon('trash', 15) + '</button></div>');
+        });
+    };
+    loadLinks();
+    $('#shareLinks').addEventListener('click', async e => {
+        const btn = e.target.closest('[data-revoke]');
+        if (!btn) return;
+        try {
+            await api('shares', { json: { _sub: 'revoke', id: Number(btn.dataset.revoke) } });
+            toast('Link revoked', 'ok');
+            loadLinks();
+        } catch (err) { toast(err.message, 'err'); }
+    });
     $('#shareGenBtn').onclick = async () => {
         const btn = $('#shareGenBtn');
         btn.disabled = true;
         try {
-            const d = await api('objects', { json: { _sub: 'presign', bucket_id: state.bucketId, key, expires: Number($('#shareExpires').value) } });
+            const exp = $('#shareExpires').value;
+            let url, note;
+            if (exp === 'never' || Number(exp) > 604800) {
+                const d = await api('shares', { json: { _sub: 'create', bucket_id: state.bucketId, key, expires_in: exp === 'never' ? 'never' : Number(exp) } });
+                url = d.url;
+                note = d.expires_at ? 'Expires ' + fmtTime(d.expires_at) : 'Never expires - revoke it here any time';
+                loadLinks();
+            } else {
+                const d = await api('objects', { json: { _sub: 'presign', bucket_id: state.bucketId, key, expires: Number(exp) } });
+                url = d.url;
+                note = 'Signed URL - cannot be revoked, expires automatically';
+            }
             $('#shareResult').innerHTML =
-                '<div class="tf"><input readonly value="' + esc(d.url) + '" placeholder=" " id="shareUrl"><label>Download URL</label></div>' +
+                '<div class="tf"><input readonly value="' + esc(url) + '" placeholder=" " id="shareUrl"><label>Download URL</label></div>' +
+                '<p class="muted" style="margin:0 0 6px">' + esc(note) + '</p>' +
                 '<div style="display:flex;gap:8px;margin-top:6px">' +
                 '<button id="shareCopyBtn" class="btn btn-tonal btn-sm"><span class="bi">' + icon('copy', 15) + '</span>Copy</button>' +
                 '<button id="shareOpenBtn" class="btn btn-outlined btn-sm">Open</button>' +
                 '</div>';
-            $('#shareCopyBtn').onclick = () => copyText(d.url);
-            $('#shareOpenBtn').onclick = () => window.open(d.url, '_blank', 'noopener');
+            $('#shareCopyBtn').onclick = () => copyText(url);
+            $('#shareOpenBtn').onclick = () => window.open(url, '_blank', 'noopener');
             btn.textContent = 'Regenerate link';
             btn.disabled = false;
         } catch (err) {

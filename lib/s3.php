@@ -167,6 +167,45 @@ function s3_public_object(string $method, string $path, array $query): ?array
     return [$user, $b, $key];
 }
 
+// Serves a token share link (/share/<token>): no authentication, optional
+// expiry. Returns [ownerUser, bucketRow, key] or throws S3Exception.
+function s3_share_token_object(string $token): array
+{
+    if (!preg_match('/^[0-9a-f]{32,128}$/', $token)) {
+        throw new S3Exception('NoSuchKey', 'The specified key does not exist.', 404);
+    }
+    $st = db()->prepare('SELECT * FROM share_tokens WHERE token = ?');
+    $st->execute([$token]);
+    $row = $st->fetch();
+    if ($row === false) {
+        throw new S3Exception('NoSuchKey', 'The specified key does not exist.', 404);
+    }
+    if ($row['expires_at'] !== null && $row['expires_at'] !== '' && $row['expires_at'] <= gmdate('Y-m-d H:i:s')) {
+        throw new S3Exception('AccessDenied', 'Request has expired.', 403);
+    }
+    $user = db_find_user((int)$row['user_id']);
+    $b = db_find_bucket((int)$row['bucket_id']);
+    if ($user === null || $b === null || !empty($user['disabled'])) {
+        throw new S3Exception('NoSuchKey', 'The specified key does not exist.', 404);
+    }
+    if (db_find_object((int)$b['id'], (string)$row['key']) === null) {
+        throw new S3Exception('NoSuchKey', 'The specified key does not exist.', 404);
+    }
+    return [$user, $b, (string)$row['key']];
+}
+
+// Drops share tokens for a deleted object, and retargets them on rename/move
+// so links keep working when files move.
+function share_purge_object(int $bucketId, string $key): void
+{
+    db()->prepare('DELETE FROM share_tokens WHERE bucket_id = ? AND key = ?')->execute([$bucketId, $key]);
+}
+
+function share_retarget(int $bucketId, string $oldKey, string $newKey): void
+{
+    db()->prepare('UPDATE share_tokens SET key = ? WHERE bucket_id = ? AND key = ?')->execute([$newKey, $bucketId, $oldKey]);
+}
+
 // Permanently deletes objects past their lifecycle retention. Runs lazily
 // whenever a bucket is listed (S3 or admin), so expiry needs no cron.
 // Unlike trash, lifecycle expiry is final - this is documented in the UI.
@@ -203,6 +242,7 @@ function lifecycle_enforce_bucket(int $bucketId): void
                 @unlink($p);
             }
             db()->prepare('DELETE FROM objects WHERE id = ?')->execute([$o['id']]);
+            share_purge_object($bucketId, (string)$o['key']);
         }
     }
 }
@@ -397,6 +437,8 @@ function s3_delete_bucket(array $user, string $bucket, ?array $b, array $ctx): v
     s3_delete_tree($dir);
     s3_delete_tree(s3_uploads_user_dir($user['username']) . '/' . $bucket);
     $st = db()->prepare('DELETE FROM uploads WHERE bucket_id = ?');
+    $st->execute([$b['id']]);
+    $st = db()->prepare('DELETE FROM share_tokens WHERE bucket_id = ?');
     $st->execute([$b['id']]);
     $st = db()->prepare('DELETE FROM buckets WHERE id = ?');
     $st->execute([$b['id']]);
@@ -1042,6 +1084,7 @@ function s3_delete_object(array $user, array $b, string $key, array $ctx): void
         @unlink(s3_object_path($user['username'], $b['name'], $key));
         $st = db()->prepare('DELETE FROM objects WHERE id = ?');
         $st->execute([$obj['id']]);
+        share_purge_object((int)$b['id'], $key);
     }
     s3_finish('', 204, [], $ctx);
 }
@@ -1075,6 +1118,7 @@ function s3_delete_objects(array $user, array $b, array $ctx): void
             @unlink(s3_object_path($user['username'], $b['name'], $k));
             $st = db()->prepare('DELETE FROM objects WHERE id = ?');
             $st->execute([$found['id']]);
+            share_purge_object((int)$b['id'], $k);
             $deleted[] = $k;
         }
     }
