@@ -4,6 +4,7 @@
 declare(strict_types=1);
 
 require __DIR__ . '/config.php';
+require __DIR__ . '/lib/version.php';
 require APP_ROOT . '/lib/util.php';
 require APP_ROOT . '/lib/db.php';
 require APP_ROOT . '/lib/auth.php';
@@ -84,7 +85,7 @@ if ($path === '/health' && ($method === 'GET' || $method === 'HEAD')) {
     $payload = json_encode([
         'ok' => $dbOk,
         'app' => APP_NAME,
-        'version' => APP_VERSION,
+        'version' => app_version(),
         'time' => gmdate('Y-m-d H:i:s'),
         'disk_free_bytes' => (int)@disk_free_space(DATA_DIR),
         'db' => $dbOk ? 'ok' : 'error',

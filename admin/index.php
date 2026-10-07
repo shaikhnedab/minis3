@@ -748,6 +748,7 @@ tr.slow td:last-child{color:var(--warn);font-weight:700}
 .pwmeter div.strong{background:var(--ok)}
 .userlink{cursor:pointer}
 .userlink:hover{color:var(--primary);text-decoration:underline}
+.notes-block{background:var(--surface-2);border:1px solid var(--outline-var);border-radius:8px;padding:10px 12px;font-size:13px;line-height:1.55}
 /* drag & drop move between folders */
 tr[data-key][draggable="true"],.gcard[data-key]{cursor:grab}
 .drover{outline:2px dashed var(--primary) !important;outline-offset:-2px;border-radius:8px}
@@ -1159,6 +1160,18 @@ body{font-size:13.5px}
             <button id="connectCopyCli" class="btn btn-tonal btn-sm"><span class="bi" data-icon="copy"></span>Copy AWS CLI config</button>
             <button id="connectCopyRclone" class="btn btn-tonal btn-sm"><span class="bi" data-icon="copy"></span>Copy rclone remote</button>
           </div>
+        </div>
+        <div class="card" style="margin:0 0 16px;max-width:640px">
+          <h3>Software update</h3>
+          <p class="muted" style="margin:2px 0 10px">Update from GitHub Releases. Code files are replaced; <code>config.php</code> and everything under <code>data/</code> are preserved, database migrations run automatically, and a rollback snapshot is kept.</p>
+          <div id="updateSummary"><p class="muted" style="margin:0">Loading&hellip;</p></div>
+          <div class="modal-actions" style="justify-content:flex-start">
+            <button id="updateCheckBtn" class="btn btn-tonal btn-sm"><span class="bi" data-icon="refresh"></span>Check for updates</button>
+            <button id="updateNowBtn" class="btn btn-filled btn-sm hidden"><span class="bi" data-icon="download"></span>Update</button>
+            <button id="updateRollbackBtn" class="btn btn-tonal btn-sm hidden"><span class="bi" data-icon="refresh"></span>Rollback</button>
+          </div>
+          <div id="updateProgress"></div>
+          <div id="updateError" class="error hidden"></div>
         </div>
         <div class="card" style="margin:0 0 16px;max-width:640px">
           <h3>Backup &amp; restore</h3>
@@ -1833,7 +1846,7 @@ function activateTab(tab, updateHash) {
     if (tab === 'buckets') loadBuckets().then(maybeRestoreFilesView);
     if (tab === 'logs') loadLogs();
     if (tab === 'trash') loadTrash();
-    if (tab === 'settings') { renderTotpStatus(); loadUploadsPanel(); loadPasskeys(); }
+    if (tab === 'settings') { renderTotpStatus(); loadUploadsPanel(); loadPasskeys(); refreshUpdateSummary(); }
 }
 
 // Back / forward buttons and manual hash edits switch tabs too.
@@ -2120,6 +2133,120 @@ $('#revokeSessionsBtn').addEventListener('click', () => {
     });
 });
 
+/* ---------- settings: software update ---------- */
+let updateRelease = null;
+
+function updateChangelogHtml(body) {
+    return esc(body || 'No changelog provided.').replace(/\n/g, '<br>');
+}
+
+async function refreshUpdateSummary() {
+    const box = $('#updateSummary');
+    if (!box) return;
+    let st = null;
+    try {
+        st = await api('updater', { method: 'GET', params: { op: 'status' } });
+    } catch (err) {
+        box.innerHTML = '<p class="muted" style="margin:0">Could not load update status.</p>';
+        return;
+    }
+    updateRelease = (st.release && st.release.update_available) ? st.release : null;
+    const cur = esc(st.current || state.version || '?');
+    let html = '<p style="margin:0 0 4px">Installed: <code>' + cur + '</code>';
+    if (updateRelease) {
+        html += ' &nbsp;<span class="st st4">update available: ' + esc(updateRelease.latest) + '</span>';
+    } else if (st.release && st.release.latest) {
+        html += ' &nbsp;<span class="st st2">up to date</span>';
+    }
+    html += '</p>';
+    if (st.checked_at || (st.release && st.release.checked_at)) {
+        html += '<p class="muted" style="margin:0;font-size:12px">Last checked: ' + esc(st.checked_at || st.release.checked_at) + '</p>';
+    }
+    if (st.error) {
+        html += '<p class="error" style="margin:6px 0 0">' + esc(st.error) + '</p>';
+    }
+    box.innerHTML = html;
+    $('#updateNowBtn').classList.toggle('hidden', !updateRelease);
+    const hasBackup = !!(st.backup && st.backup.dir);
+    $('#updateRollbackBtn').classList.toggle('hidden', !hasBackup);
+}
+
+$('#updateCheckBtn').addEventListener('click', async () => {
+    const err = $('#updateError');
+    err.classList.add('hidden');
+    $('#updateCheckBtn').disabled = true;
+    try {
+        const d = await api('updater', { method: 'GET', params: { op: 'check' } });
+        await refreshUpdateSummary();
+        if (d.update_available) {
+            toast('Update available: ' + d.latest, 'ok');
+        } else {
+            toast('Already on the latest version (' + d.latest + ')', 'ok');
+        }
+    } catch (e) { toast(e.message, 'err'); }
+    $('#updateCheckBtn').disabled = false;
+});
+
+function updateStep(text) {
+    $('#updateProgress').innerHTML = '<p class="muted" style="margin:8px 0 0"><span class="spinner" style="width:16px;height:16px;border-width:2px;display:inline-block;vertical-align:-3px"></span> ' + esc(text) + '</p>';
+}
+
+$('#updateNowBtn').addEventListener('click', () => {
+    if (!updateRelease) return;
+    const r = updateRelease;
+    openModal(
+        '<h3>Update to ' + esc(r.latest) + '</h3>' +
+        '<table class="grid"><tbody>' +
+        '<tr><td>Installed</td><td><code>' + esc(r.current) + '</code></td></tr>' +
+        '<tr><td>Download</td><td>' + esc(fmtBytes(r.asset.size)) + ' <span class="muted">(' + esc(r.asset.name) + ', checksum verified)</span></td></tr>' +
+        '</tbody></table>' +
+        '<p class="muted" style="margin:12px 0 6px">Changelog</p>' +
+        '<div class="notes-block" style="max-height:220px;overflow:auto">' + updateChangelogHtml(r.body) + '</div>' +
+        '<p class="muted">config.php and data/ are preserved. A backup snapshot is taken first and can be rolled back.</p>' +
+        '<div class="modal-actions">' +
+        '<button id="updateApplyBtn" class="btn btn-filled">Download &amp; install</button>' +
+        '<button class="btn btn-text" data-close>Cancel</button></div>');
+    $('#updateApplyBtn').onclick = async () => {
+        closeModal();
+        const err = $('#updateError');
+        err.classList.add('hidden');
+        try {
+            updateStep('Downloading package…');
+            await api('updater', { json: { op: 'download' } });
+            updateStep('Backing up and installing files…');
+            const ap = await api('updater', { json: { op: 'apply' } });
+            updateStep('Running database migrations…');
+            const mg = await api('updater', { json: { op: 'migrate' } });
+            updateStep('Cleaning up…');
+            await api('updater', { json: { op: 'cleanup' } });
+            $('#updateProgress').innerHTML = '';
+            await refreshUpdateSummary();
+            openModal(
+                '<h3>Updated to ' + esc(mg.version) + '</h3>' +
+                '<p class="muted">Installed ' + Number((ap.counts && ap.counts.replaced) || 0) + ' replaced and ' + Number((ap.counts && ap.counts.added) || 0) + ' new files. Reload the panel to run the new version.</p>' +
+                '<div class="modal-actions"><button class="btn btn-filled" onclick="location.reload()">Reload panel</button></div>');
+        } catch (e) {
+            $('#updateProgress').innerHTML = '';
+            err.textContent = e.message + ' Your install was not modified' + (/backup kept|Rollback/i.test(e.message) ? ' (a backup was kept - use Rollback).' : '.');
+            err.classList.remove('hidden');
+        }
+    };
+});
+
+$('#updateRollbackBtn').addEventListener('click', () => {
+    confirmDialog('Roll back code files to the pre-update backup? Data and config are untouched either way.', 'Roll back', async () => {
+        try {
+            const d = await api('updater', { json: { op: 'rollback' } });
+            await refreshUpdateSummary();
+            openModal(
+                '<h3>Rollback complete</h3>' +
+                '<p class="muted">Restored ' + Number(d.restored || 0) + ' files, removed ' + Number(d.removed || 0) + ' added files.' +
+                (d.kept && d.kept.length ? ' Kept (changed since install): ' + esc(d.kept.join(', ')) : '') + ' Reload the panel.</p>' +
+                '<div class="modal-actions"><button class="btn btn-filled" onclick="location.reload()">Reload panel</button></div>');
+        } catch (err) { toast(err.message, 'err'); }
+    });
+});
+
 /* ---------- command palette (Ctrl+K) ---------- */
 let palItems = [];
 let palSel = 0;
@@ -2149,6 +2276,7 @@ function paletteCommands(q) {
         } },
         { ic: 'download', t: 'Export logs as CSV', run: () => $('#exportLogsBtn').click() },
         { ic: 'moon', t: 'Toggle dark / light theme', run: () => $('#themeBtn').click() },
+        { ic: 'download', t: 'Check for updates', run: () => { activateTab('settings'); setTimeout(() => $('#updateCheckBtn').click(), 60); } },
     ];
     if (!q) return cmds.map(c => ({ ...c, sec: 'Commands' }));
     q = q.toLowerCase();

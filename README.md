@@ -77,13 +77,17 @@ objects), keyboard shortcuts (`/` focuses key search, `u` uploads).
 | Buckets   | Add / rename / type-to-confirm delete, public/private toggle, lifecycle rules, per-bucket object count + size; file browser with list/grid views, image thumbnails, search, sort, multi-select bulk copy/move/delete, new folder/file, upload (button, folder upload, drag & drop, paste) with progress, drag rows onto folders to move, inline image/video/audio/PDF preview, text editor (512 KB), object details (ETag, type, meta), share links with expiry picker (signed URLs + revocable never-expire tokens), folder/bucket ZIP download |
 | Logs      | Every request with user/kind/method/status filters + search, slow-request highlighting, live-tail mode, one-click CSV export of the filtered view, clear, configurable retention (auto-prune) |
 | Trash     | Soft-deleted files with retention badges, restore preview (original path, size, purge date), restore / purge / empty; retention days in Settings |
-| Settings  | Connect card (endpoint, region, copy-paste AWS CLI + rclone snippets per user), backup export/import (JSON), last sign-in + session revocation, branding (app name + favicon), logging toggles, log retention, admin account, password (with strength meter), trash retention, TOTP 2FA, passkeys, multipart-upload manager |
+| Settings  | Software update (GitHub Releases, staged + rollback), Connect card (endpoint, region, copy-paste AWS CLI + rclone snippets per user), backup export/import (JSON), last sign-in + session revocation, branding (app name + favicon), logging toggles, log retention, admin account, password (with strength meter), trash retention, TOTP 2FA, passkeys, multipart-upload manager |
 
 ## Requirements
 
-- PHP 7.4+ with `pdo_sqlite` and `simplexml` (bundled in standard builds).
+- PHP 7.4+ with `pdo_sqlite`, `simplexml`, `openssl`, `mbstring`, `fileinfo`
+  and `json` (all bundled in standard builds; the installer runs a preflight
+  check and tells you how to enable anything missing).
 - Apache with mod_rewrite (shared-hosting default) or nginx.
 - SQLite 3.24+ (for upserts; any distro PHP in the last few years has this).
+- No `zip` extension required (the updater ships a dependency-free fallback);
+  no shell access required.
 - A browser with JavaScript for the admin panel. Clipboard copy needs a
   secure context (HTTPS or `localhost`); everywhere else the panel falls back
   to manual copy. Passkeys additionally need HTTPS or `localhost` (Chrome
@@ -208,6 +212,7 @@ Same-origin JSON API at `/admin/api.php?action=…`, session cookie plus
 | `server_info` | PHP/SQLite versions, disk + data-dir + DB sizes, counts, log span |
 | `backup_export` / `backup_import` | JSON with users (incl. keys), buckets and panel settings; import recreates missing entries and reports `{users_created, buckets_created, skipped}` |
 | `revoke_sessions` | Invalidate every admin session except the current one |
+| `updater` (`op=status/check/download/apply/migrate/cleanup/rollback`) | Staged panel updates from GitHub Releases (login + CSRF; `check`/`status` are GET) |
 | `update_settings`, `update_profile`, `change_password`, `update_logs` | Panel preferences, admin renames/password |
 | `totp_start`, `totp_enable`, `totp_disable` | TOTP 2FA lifecycle |
 | `passkey_start`, `passkey_register`, `passkeys`, `passkey_delete`, `passkey_challenge`, `passkey_login` | WebAuthn lifecycle (ES256 / RS256 / Ed25519) |
@@ -286,6 +291,7 @@ calls get 401; revoked sessions get 401 with "Session revoked".
 ## Releases
 
 Every commit is released on GitHub with a version bump: the commit sets
-`APP_VERSION` in `config.php` (shown in the Settings footer) and is tagged
+the version in the `VERSION` file (shown in the Settings footer; the legacy
+`APP_VERSION` in `config.php` is preserved untouched by updates) and is tagged
 `vX.Y.Z`, then pushed with the tag. Each Release ships the full source
 (`data/` is gitignored, so live objects and the database never ship).

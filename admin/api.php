@@ -5,12 +5,14 @@
 declare(strict_types=1);
 
 require dirname(__DIR__) . '/config.php';
+require dirname(__DIR__) . '/lib/version.php';
 require APP_ROOT . '/lib/util.php';
 require APP_ROOT . '/lib/db.php';
 require APP_ROOT . '/lib/auth.php';
 require APP_ROOT . '/lib/s3.php';
 require APP_ROOT . '/lib/webauthn.php';
 require APP_ROOT . '/lib/log.php';
+require APP_ROOT . '/lib/update.php';
 
 db_init();
 
@@ -157,7 +159,7 @@ function admin_route(string $method, string $action): void
             if ($row === false) {
                 admin_err('Admin account not initialized. Run install.php first.', 500);
             }
-            admin_ok(['csrf' => $_SESSION['csrf'], 'username' => $row['username'], 'log_s3' => (int)$row['log_s3'], 'log_admin' => (int)$row['log_admin'], 'totp' => (string)$row['totp_secret'] !== '', 'trash_days' => (int)$row['trash_days'], 'log_days' => (int)$row['log_days'], 'last_login_at' => $row['last_login_at'], 'last_login_ip' => $row['last_login_ip'], 'app_name' => app_name(), 'favicon' => favicon_ext(), 'version' => APP_VERSION]);
+            admin_ok(['csrf' => $_SESSION['csrf'], 'username' => $row['username'], 'log_s3' => (int)$row['log_s3'], 'log_admin' => (int)$row['log_admin'], 'totp' => (string)$row['totp_secret'] !== '', 'trash_days' => (int)$row['trash_days'], 'log_days' => (int)$row['log_days'], 'last_login_at' => $row['last_login_at'], 'last_login_ip' => $row['last_login_ip'], 'app_name' => app_name(), 'favicon' => favicon_ext(), 'version' => app_version()]);
 
         case 'logout':
             $_SESSION = [];
@@ -173,7 +175,7 @@ function admin_route(string $method, string $action): void
             if ($row === false) {
                 admin_err('Admin account not initialized. Run install.php first.', 500);
             }
-            admin_ok(['csrf' => $_SESSION['csrf'], 'username' => $row['username'], 'log_s3' => (int)$row['log_s3'], 'log_admin' => (int)$row['log_admin'], 'totp' => (string)$row['totp_secret'] !== '', 'trash_days' => (int)$row['trash_days'], 'log_days' => (int)$row['log_days'], 'last_login_at' => $row['last_login_at'], 'last_login_ip' => $row['last_login_ip'], 'app_name' => app_name(), 'favicon' => favicon_ext(), 'version' => APP_VERSION]);
+            admin_ok(['csrf' => $_SESSION['csrf'], 'username' => $row['username'], 'log_s3' => (int)$row['log_s3'], 'log_admin' => (int)$row['log_admin'], 'totp' => (string)$row['totp_secret'] !== '', 'trash_days' => (int)$row['trash_days'], 'log_days' => (int)$row['log_days'], 'last_login_at' => $row['last_login_at'], 'last_login_ip' => $row['last_login_ip'], 'app_name' => app_name(), 'favicon' => favicon_ext(), 'version' => app_version()]);
 
         case 'folders':
             admin_require_login();
@@ -594,6 +596,10 @@ function admin_route(string $method, string $action): void
             admin_server_info();
             return;
 
+        case 'updater':
+            admin_updater($method);
+            return;
+
         default:
             admin_err('Unknown action: ' . $action, 404);
     }
@@ -765,7 +771,7 @@ function admin_passkey_login(): void
     if ($row === false) {
         admin_err('Admin account not initialized. Run install.php first.', 500);
     }
-    admin_ok(['csrf' => $_SESSION['csrf'], 'username' => $row['username'], 'log_s3' => (int)$row['log_s3'], 'log_admin' => (int)$row['log_admin'], 'totp' => (string)$row['totp_secret'] !== '', 'trash_days' => (int)$row['trash_days'], 'log_days' => (int)$row['log_days'], 'last_login_at' => $row['last_login_at'], 'last_login_ip' => $row['last_login_ip'], 'app_name' => app_name(), 'favicon' => favicon_ext(), 'version' => APP_VERSION]);
+    admin_ok(['csrf' => $_SESSION['csrf'], 'username' => $row['username'], 'log_s3' => (int)$row['log_s3'], 'log_admin' => (int)$row['log_admin'], 'totp' => (string)$row['totp_secret'] !== '', 'trash_days' => (int)$row['trash_days'], 'log_days' => (int)$row['log_days'], 'last_login_at' => $row['last_login_at'], 'last_login_ip' => $row['last_login_ip'], 'app_name' => app_name(), 'favicon' => favicon_ext(), 'version' => app_version()]);
 }
 
 function admin_users(string $method): void
@@ -1833,6 +1839,296 @@ function admin_revoke_sessions(): void
     admin_ok();
 }
 
+/* ---------------- in-panel updater ---------------- */
+
+function admin_updater(string $method): void
+{
+    admin_require_login();
+    $data = ($method === 'GET') ? $_GET : admin_post_array();
+    $op = (string)($data['op'] ?? '');
+    $work = updater_work_dir();
+
+    if ($op === 'status') {
+        if ($method !== 'GET') {
+            admin_err('Bad request', 400);
+        }
+        $st = updater_state_load();
+        $st['current'] = app_version();
+        $st['extractor'] = updater_extractor_note();
+        $st['zip_available'] = class_exists('ZipArchive');
+        admin_ok($st);
+    }
+
+    if ($op === 'check') {
+        if ($method !== 'GET') {
+            admin_err('Bad request', 400);
+        }
+        $res = updater_check(app_version());
+        if (!$res['ok']) {
+            $st = updater_state_load();
+            $st['error'] = $res['error'];
+            updater_state_save($st);
+            admin_err($res['error'], isset($res['http']) && $res['http'] === 429 ? 429 : 502);
+        }
+        $st = updater_state_load();
+        $prevTag = is_array($st['release']) ? (string)($st['release']['tag'] ?? '') : '';
+        if ($prevTag !== '' && $prevTag !== (string)($res['tag'] ?? '') && !empty($res['update_available'])) {
+            $st['download'] = null;
+            $st['staged'] = null;
+            $st['backup'] = null;
+            $st['applied'] = null;
+        }
+        $st['release'] = $res;
+        $st['checked_at'] = gmdate('Y-m-d H:i:s');
+        $st['error'] = null;
+        updater_state_save($st);
+        admin_ok($res);
+    }
+
+    admin_require_csrf();
+    if ($method !== 'POST') {
+        admin_err('Bad request', 400);
+    }
+
+    if ($op === 'download') {
+        $st = updater_state_load();
+        $rel = is_array($st['release']) ? $st['release'] : null;
+        if ($rel === null || empty($rel['update_available']) || empty($rel['asset']['url'])) {
+            admin_err('Check for updates first.', 400);
+        }
+        if (!updater_lock_acquire('download')) {
+            admin_err('Another update step is already running.', 409);
+        }
+        try {
+            if (!updater_mkdir($work)) {
+                throw new RuntimeException('Cannot create updater working directory.');
+            }
+            $tag = (string)$rel['tag'];
+            $pkg = $work . '/pkg-' . preg_replace('/[^0-9A-Za-z.-]/', '', $tag) . '.zip';
+            $asset = $rel['asset'];
+            $expected = (int)($asset['size'] ?? 0);
+            $needFetch = true;
+            if (is_file($pkg) && $expected > 0 && filesize($pkg) === $expected) {
+                $h = @hash_file('sha256', $pkg);
+                if (is_string($h)) {
+                    $needFetch = false;
+                    $chk = updater_fetch_text((string)$asset['checksum_url']);
+                    if ($chk === null || !hash_equals(updater_parse_sha256($chk), strtolower($h))) {
+                        $needFetch = true;
+                    }
+                }
+            }
+            if ($needFetch) {
+                @unlink($pkg);
+                list($ok, $err) = updater_download((string)$asset['url'], $pkg, $expected);
+                if (!$ok) {
+                    throw new RuntimeException($err);
+                }
+                $chk = updater_fetch_text((string)$asset['checksum_url']);
+                if ($chk === null) {
+                    @unlink($pkg);
+                    throw new RuntimeException('Cannot fetch the release checksum file.');
+                }
+                $want = updater_parse_sha256($chk);
+                $got = @hash_file('sha256', $pkg);
+                if ($want === '' || !is_string($got) || !hash_equals($want, strtolower($got))) {
+                    @unlink($pkg);
+                    throw new RuntimeException('Checksum mismatch - package rejected.');
+                }
+            }
+            $staging = $work . '/staging';
+            updater_rmdir($staging);
+            list($ok, $err) = updater_extract($pkg, $staging);
+            if (!$ok) {
+                throw new RuntimeException($err);
+            }
+            $manPath = updater_find_manifest($staging);
+            if ($manPath === '') {
+                throw new RuntimeException('Package has no update manifest - refusing to install.');
+            }
+            $manifest = json_decode((string)@file_get_contents($manPath), true);
+            if (!is_array($manifest)) {
+                throw new RuntimeException('Update manifest is unreadable.');
+            }
+            $merr = updater_manifest_validate($manifest);
+            if (!empty($merr)) {
+                throw new RuntimeException(implode(' ', $merr));
+            }
+            if (app_version_normalize((string)$manifest['version']) !== app_version_normalize((string)$rel['latest'])) {
+                throw new RuntimeException('Package version does not match the release.');
+            }
+            // Verify every manifest file against the staged copy.
+            $root = updater_package_root($staging);
+            $bad = [];
+            foreach ((array)$manifest['files'] as $f) {
+                $p = $root . '/' . $f['path'];
+                if (!is_file($p)) {
+                    $bad[] = (string)$f['path'];
+                    continue;
+                }
+                $h = @hash_file('sha256', $p);
+                if (!is_string($h) || !hash_equals(strtolower((string)$f['sha256']), strtolower($h))) {
+                    $bad[] = (string)$f['path'];
+                }
+            }
+            if (!empty($bad)) {
+                throw new RuntimeException('Staged package failed integrity check: ' . implode(', ', array_slice($bad, 0, 5)));
+            }
+            $st = updater_state_load();
+            $st['download'] = ['package' => $pkg, 'bytes' => filesize($pkg), 'at' => gmdate('Y-m-d H:i:s')];
+            $st['staged'] = ['tag' => $tag, 'dir' => $staging, 'root' => $root, 'manifest' => $manifest, 'files' => count($manifest['files'])];
+            $st['error'] = null;
+            updater_state_save($st);
+            updater_lock_release();
+            admin_ok([
+                'files' => count($manifest['files']),
+                'bytes' => filesize($pkg),
+                'extractor' => updater_extractor_note(),
+                'version' => (string)$manifest['version'],
+            ]);
+        } catch (Throwable $e) {
+            updater_lock_release();
+            updater_fail($e->getMessage());
+            admin_err($e->getMessage(), 502);
+        }
+    }
+
+    if ($op === 'apply') {
+        $st = updater_state_load();
+        $staged = is_array($st['staged']) ? $st['staged'] : null;
+        if ($staged === null || empty($staged['manifest'])) {
+            admin_err('Download and verify a package first.', 400);
+        }
+        if (!updater_lock_acquire('apply')) {
+            admin_err('Another update step is already running.', 409);
+        }
+        try {
+            $manifest = $staged['manifest'];
+            $issues = updater_requirements($manifest, APP_ROOT, (int)($st['download']['bytes'] ?? 0));
+            if (!empty($issues)) {
+                throw new RuntimeException(implode(' ', $issues));
+            }
+            $plan = updater_build_plan($manifest, APP_ROOT);
+            if (empty($plan['replace']) && empty($plan['add'])) {
+                throw new RuntimeException('Nothing to install.');
+            }
+            $installed = updater_installed_hashes($staged['root'], array_merge($plan['replace'], $plan['add']));
+            list($backup, $err) = updater_do_backup(APP_ROOT, $plan, app_version(), $installed);
+            if ($err !== null) {
+                throw new RuntimeException($err);
+            }
+            list($counts, $err) = updater_do_apply(APP_ROOT, $staged['root'], $backup['journal'], $backup['dir']);
+            if ($err !== null) {
+                throw new RuntimeException($err . ' (backup kept - use Rollback).');
+            }
+            $st = updater_state_load();
+            $st['backup'] = $backup;
+            $st['applied'] = ['tag' => (string)$staged['manifest']['version'], 'at' => gmdate('Y-m-d H:i:s'), 'counts' => $counts, 'plan' => $plan];
+            $st['error'] = null;
+            updater_state_save($st);
+            updater_lock_release();
+            admin_ok(['counts' => $counts, 'skipped' => ['protected' => $plan['skipped_protected'], 'deleted' => $plan['skipped_deleted']], 'warnings' => $plan['warnings']]);
+        } catch (Throwable $e) {
+            updater_lock_release();
+            updater_fail($e->getMessage());
+            admin_err($e->getMessage(), 500);
+        }
+    }
+
+    if ($op === 'migrate') {
+        $st = updater_state_load();
+        if (empty($st['applied'])) {
+            admin_err('Nothing to migrate - apply an update first.', 400);
+        }
+        if (!updater_lock_acquire('migrate')) {
+            admin_err('Another update step is already running.', 409);
+        }
+        try {
+            db_init();
+            $target = app_version_normalize((string)($st['applied']['tag'] ?? ''));
+            $live = app_version_normalize(app_version());
+            if ($target === '' || $live === '' || version_compare($live, $target, '<')) {
+                throw new RuntimeException('Post-update version check failed.');
+            }
+            $manifest = $st['staged']['manifest'];
+            $bad = [];
+            foreach ((array)$manifest['files'] as $f) {
+                $p = APP_ROOT . '/' . $f['path'];
+                if (!is_file($p)) {
+                    $bad[] = (string)$f['path'];
+                    continue;
+                }
+                $h = @hash_file('sha256', $p);
+                if (!is_string($h) || !hash_equals(strtolower((string)$f['sha256']), strtolower($h))) {
+                    $bad[] = (string)$f['path'];
+                }
+            }
+            if (!empty($bad)) {
+                throw new RuntimeException('Installed files failed verification: ' . implode(', ', array_slice($bad, 0, 5)));
+            }
+            $st = updater_state_load();
+            $st['migrated'] = ['at' => gmdate('Y-m-d H:i:s'), 'version' => $live];
+            $st['error'] = null;
+            updater_state_save($st);
+            updater_lock_release();
+            admin_ok(['version' => $live]);
+        } catch (Throwable $e) {
+            updater_lock_release();
+            updater_fail($e->getMessage());
+            admin_err($e->getMessage(), 500);
+        }
+    }
+
+    if ($op === 'cleanup') {
+        $st = updater_state_load();
+        foreach (glob(updater_work_dir() . '/pkg-*') ?: [] as $f) {
+            if (is_file($f)) {
+                @unlink($f);
+            }
+        }
+        foreach (glob(updater_work_dir() . '/staging*') ?: [] as $d) {
+            updater_rmdir($d);
+        }
+        updater_prune_backups(null, 2);
+        $st = updater_state_load();
+        $st['download'] = null;
+        $st['staged'] = null;
+        $st['error'] = null;
+        updater_state_save($st);
+        admin_ok();
+    }
+
+    if ($op === 'rollback') {
+        $st = updater_state_load();
+        $backup = is_array($st['backup']) ? $st['backup'] : null;
+        if ($backup === null || empty($backup['dir'])) {
+            admin_err('No update backup to roll back to.', 400);
+        }
+        if (!updater_lock_acquire('rollback')) {
+            admin_err('Another update step is already running.', 409);
+        }
+        try {
+            list($out, $err) = updater_do_rollback(APP_ROOT, $backup);
+            if ($err !== null) {
+                throw new RuntimeException($err);
+            }
+            $st = updater_state_load();
+            $st['rolled_back'] = ['at' => gmdate('Y-m-d H:i:s')];
+            $st['applied'] = null;
+            $st['error'] = null;
+            updater_state_save($st);
+            updater_lock_release();
+            admin_ok($out);
+        } catch (Throwable $e) {
+            updater_lock_release();
+            updater_fail($e->getMessage());
+            admin_err($e->getMessage(), 500);
+        }
+    }
+
+    admin_err('Bad request', 400);
+}
+
 function admin_lifecycle(string $method): void
 {
     admin_require_login();
@@ -1927,7 +2223,7 @@ function admin_server_info(): void
         'log_rows' => $count('SELECT COUNT(*) FROM logs'),
         'oldest_log' => db()->query('SELECT MIN(ts) FROM logs')->fetchColumn(),
         'newest_log' => db()->query('SELECT MAX(ts) FROM logs')->fetchColumn(),
-        'version' => APP_VERSION,
+        'version' => app_version(),
     ]);
 }
 

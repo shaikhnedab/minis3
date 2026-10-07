@@ -22,7 +22,7 @@ jobs:
         run: |
           NAME="minis3-${GITHUB_REF_NAME}"
           mkdir -p "/tmp/$NAME"
-          for f in index.php install.php reset.php config.php .htaccess nginx.conf router.php \
+          for f in index.php install.php reset.php config.php VERSION .htaccess nginx.conf router.php \
                    start-dev.bat start-dev.ps1 stop-dev.bat stop-dev.ps1 \
                    Dockerfile docker-compose.yml .dockerignore \
                    README.md DIRECTADMIN.md NGINX.md; do
@@ -33,11 +33,51 @@ jobs:
           done
           mkdir -p "/tmp/$NAME/data"
           printf '<IfModule mod_authz_core.c>\nRequire all denied\n</IfModule>\n' > "/tmp/$NAME/data/.htaccess"
+          python3 - "$NAME" <<'PYEOF'
+          import hashlib, json, os, sys
+          name = sys.argv[1]
+          root = '/tmp/' + name
+          version = name.rsplit('-', 1)[-1].lstrip('vV')
+          files = []
+          for dirpath, dirnames, filenames in os.walk(root):
+              dirnames[:] = sorted(d for d in dirnames if d != 'data')
+              for fn in sorted(filenames):
+                  p = os.path.join(dirpath, fn)
+                  rel = os.path.relpath(p, root).replace(os.sep, '/')
+                  if rel == 'data/.htaccess':
+                      continue
+                  h = hashlib.sha256()
+                  size = 0
+                  with open(p, 'rb') as f:
+                      while True:
+                          chunk = f.read(1048576)
+                          if not chunk:
+                              break
+                          size += len(chunk)
+                          h.update(chunk)
+                  files.append({'path': rel, 'size': size, 'sha256': h.hexdigest()})
+          manifest = {
+              'app': 'minis3-update',
+              'version': version,
+              'tag': name.rsplit('-', 1)[-1],
+              'min_php': '7.4.0',
+              'required_extensions': ['pdo_sqlite', 'simplexml', 'openssl', 'mbstring', 'fileinfo', 'json'],
+              'protected_paths': ['config.php', 'data'],
+              'no_restore': ['install.php', 'reset.php'],
+              'files': files,
+          }
+          with open(os.path.join(root, 'UPDATE.json'), 'w') as f:
+              json.dump(manifest, f, indent=2)
+              f.write('\n')
+          print('manifest files:', len(files))
+          PYEOF
           cd /tmp
           zip -qr "$NAME.zip" "$NAME"
           tar czf "$NAME.tar.gz" "$NAME"
-          ls -la "$NAME.zip" "$NAME.tar.gz"
-          echo "zip entries (must not contain .github/tests/data):"
+          sha256sum "$NAME.zip" | awk '{print $1}' > "$NAME.zip.sha256"
+          ls -la "$NAME.zip" "$NAME.zip.sha256" "$NAME.tar.gz"
+          echo "zip entries (must not contain .github/tests/data, must contain UPDATE.json + VERSION):"
+          unzip -l "$NAME.zip" | grep -E "UPDATE.json|/VERSION" | head -4
           unzip -l "$NAME.zip" | grep -c -E "\.github/|/tests/|/data/app" || echo "clean"
       - name: Create release if missing
         run: |
@@ -51,6 +91,6 @@ jobs:
       - name: Upload assets
         run: |
           cd /tmp
-          gh release upload "${GITHUB_REF_NAME}" --repo "$GITHUB_REPOSITORY" "minis3-${GITHUB_REF_NAME}.zip" "minis3-${GITHUB_REF_NAME}.tar.gz" --clobber
+          gh release upload "${GITHUB_REF_NAME}" --repo "$GITHUB_REPOSITORY" "minis3-${GITHUB_REF_NAME}.zip" "minis3-${GITHUB_REF_NAME}.zip.sha256" "minis3-${GITHUB_REF_NAME}.tar.gz" --clobber
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

@@ -35,6 +35,9 @@ define('LOG_REQUESTS', true);
 define('APP_NAME', 'MiniS3');
 
 // App version - bumped with every commit (see README "Releases").
+// Legacy version constant. Kept for backward compatibility only: the panel
+// updater never overwrites config.php, so the canonical installed version
+// now lives in VERSION / lib/version.php (see app_version()).
 define('APP_VERSION', '1.0.10');
 
 date_default_timezone_set('UTC');
