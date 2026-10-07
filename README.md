@@ -1,39 +1,48 @@
-# MiniS3
+# 📦 MiniS3
 
 A small S3-compatible object storage server in PHP. Runs on plain shared
 hosting (Apache) or a VPS (nginx), speaks AWS Signature V4 so `rclone`,
 `aws cli`, `s3cmd` and `mc` work out of the box, and ships with a
-dark, mobile-friendly admin panel.
+dark, mobile-friendly admin panel — including one-click updates from
+GitHub Releases.
 
 ```
 minis3/
 ├── index.php        S3 API front controller (every non-admin request)
-├── install.php      one-time installer (delete after use)
+├── install.php      one-time installer with server preflight (delete after use)
 ├── reset.php        web admin password reset (active only with a data/reset.enabled marker)
-├── config.php       configuration
+├── config.php       configuration (never overwritten by updates)
+├── VERSION          canonical version (replaced by updates)
 ├── .htaccess        Apache rewrite + protection + compression-off rules
 ├── nginx.conf       sample nginx server block
+├── Dockerfile       Alpine nginx + PHP-FPM image
+├── docker-compose.yml
 ├── router.php       only used by `php -S` for local development
 ├── admin/
 │   ├── index.php    admin panel (dashboard, users, buckets, files, logs, trash, settings)
 │   └── api.php      admin JSON API (session + CSRF protected)
-├── lib/             util, db, log, auth (SigV4), s3 handlers, webauthn (passkeys)
+├── lib/             util, db, log, auth (SigV4), s3 handlers, webauthn (passkeys),
+│                    version, update (in-panel updater)
+├── docs/            compatibility matrix
+├── deploy/docker/   nginx + supervisor + php.ini for the Docker image
 ├── data/            object storage + SQLite database (web access denied)
 ├── tools/
 │   └── reset-admin.php  CLI password reset for the admin account (web-denied)
-└── tests/smoke.php  end-to-end API test (46 checks, also runnable against existing keys)
+└── tests/
+    ├── smoke.php        end-to-end API test (48 checks fresh / 46 with existing keys)
+    └── update_test.php  updater unit tests (55 checks, no server needed)
 ```
 
-Contents: [Features](#features) · [Requirements](#requirements) ·
-[Installation](#installation) · [Client configuration](#client-configuration) ·
-[Admin panel](#admin-panel) · [Admin API](#admin-api) ·
-[Backup & restore](#backup--restore) · [Troubleshooting](#troubleshooting) ·
-[Notes and limitations](#notes-and-limitations) ·
-[Security checklist](#security-checklist) · [Releases](#releases)
+Contents: [✨ Features](#-features) · [📋 Requirements](#-requirements) ·
+[🚀 Installation](#-installation) · [🔌 Client configuration](#-client-configuration) ·
+[🖥 Admin panel](#️-admin-panel) · [🧩 Admin API](#-admin-api) ·
+[💾 Backup & restore](#-backup--restore) · [🔧 Troubleshooting](#️-troubleshooting) ·
+[📝 Notes and limitations](#-notes-and-limitations) ·
+[🔒 Security checklist](#-security-checklist) · [🔖 Releases](#️-releases)
 
-## Features
+## ✨ Features
 
-**S3 API**
+**S3 API** 🪣
 
 - Buckets: List/Create/Delete/Head, ListObjects V1 + V2 (prefix, delimiter,
   pagination), per-user namespaces (two users may own same-named buckets).
@@ -62,7 +71,7 @@ Contents: [Features](#features) · [Requirements](#requirements) ·
   FolderSync) list as folders and follow move/copy/rename/delete.
 - Storage layout: `data/users/{username}/{bucket}/{key...}`.
 
-**Admin panel**
+**Admin panel** 🖥
 
 Dark field-instrument theme (navy canvas, copper accents, mono readouts),
 Space Grotesk + IBM Plex Mono via Google Fonts with system fallbacks,
@@ -79,7 +88,7 @@ objects), keyboard shortcuts (`/` focuses key search, `u` uploads).
 | Trash     | Soft-deleted files with retention badges, restore preview (original path, size, purge date), restore / purge / empty; retention days in Settings |
 | Settings  | Software update (GitHub Releases, staged + rollback), Connect card (endpoint, region, copy-paste AWS CLI + rclone snippets per user), backup export/import (JSON), last sign-in + session revocation, branding (app name + favicon), logging toggles, log retention, admin account, password (with strength meter), trash retention, TOTP 2FA, passkeys, multipart-upload manager |
 
-## Requirements
+## 📋 Requirements
 
 - PHP 7.4+ with `pdo_sqlite`, `simplexml`, `openssl`, `mbstring`, `fileinfo`
   and `json` (all bundled in standard builds; the installer runs a preflight
@@ -93,7 +102,7 @@ objects), keyboard shortcuts (`/` focuses key search, `u` uploads).
   to manual copy. Passkeys additionally need HTTPS or `localhost` (Chrome
   rejects bare-IP origins), so the passkey button only appears where allowed.
 
-## Installation
+## 🚀 Installation
 
 1. Upload the whole `minis3/` folder to your web root and point a subdomain
    or subfolder at it, e.g. `https://s3.example.com/`.
@@ -115,18 +124,19 @@ PHP needs write access to `data/` (0775 or 0770) for files and the database.
   files; the `.htaccess` does the equivalent on Apache and also blocks
   `data/`, `lib/` and `config.php`).
 
-### Local development and CI
+### Local development and CI 🧪
 
 ```bash
 php -S 127.0.0.1:8000 router.php
 php tests/smoke.php                      # fresh install + user + full suite (48 checks)
 S3_ACCESS_KEY=... S3_SECRET_KEY=... php tests/smoke.php   # against existing keys (46 checks)
+php tests/update_test.php                # updater unit tests, no server needed (55 checks)
 ```
 
-Pushes run the same suite on PHP 7.4–8.5 via `.github/workflows/ci.yml`
-(lint + fresh-install + existing-keys runs).
+Pushes run lint plus the full matrix on PHP 7.4–8.5 via `.github/workflows/`
+(CI suite, Alpine Docker build, and clean release packaging).
 
-### Docker
+### Docker 🐳
 
 Alpine-based single image (nginx + PHP-FPM under supervisor, plain HTTP):
 
@@ -135,15 +145,16 @@ docker compose up --build -d   # serves :8080, ./data persisted
 # or: docker build -t minis3 . && docker run -p 8080:80 -v ./data:/var/www/html/data minis3
 ```
 
-Then open `http://localhost:8080/install.php`. Ensure the host `./data`
-directory is writable by www-data (uid 33) inside the container.
+Then open `http://localhost:8080/install.php`. Make sure the host `./data`
+directory is writable by the container's `www-data` user
+(`chown -R www-data:www-data ./data` where that user exists, or `chmod 770`).
 
 On Windows run the same inside WSL, or use the Windows nginx + php-cgi
 stack: `start-dev.ps1` serves http://127.0.0.1:8765 (`stop-dev.ps1` stops
 it). The scripts auto-detect the project folder, including WSL paths like
 `\\wsl.localhost\<distro>\home\<user>\minis3`.
 
-## Client configuration
+## 🔌 Client configuration
 
 The panel's **Settings → Connect** card generates these per user, but the
 shapes are:
@@ -183,21 +194,21 @@ use_https = True
 mc alias set mys3 https://s3.example.com AKIA... secret... --path on
 ```
 
-## Admin panel
+## 🖥 Admin panel
 
 Sign in at `/admin/` with the installer credentials. Sessions are PHP
 sessions (30-day cookie) plus a CSRF token; **Sessions** in Settings signs
 out every other browser/device. Failed logins are rate-limited (6 per IP per
 15 minutes, then HTTP 429) and optionally gated by TOTP and/or passkeys.
 
-**Forgot the admin password?**
+**Forgot the admin password?** 🔑
 - Shell: `php tools/reset-admin.php` from the app root (sets a new
   username/password, clears 2FA if enabled).
 - No shell: create an empty `data/reset.enabled` via FTP / File Manager, open
   `/reset.php`, set a new username/password (optionally clearing 2FA). The
   marker is deleted automatically after a successful reset.
 
-## Admin API
+## 🧩 Admin API
 
 Same-origin JSON API at `/admin/api.php?action=…`, session cookie plus
 `X-CSRF-Token` header on POSTs. Handy for scripting:
@@ -221,7 +232,7 @@ Same-origin JSON API at `/admin/api.php?action=…`, session cookie plus
 `POST`s without (or with a wrong) CSRF token are rejected with 403; logged-out
 calls get 401; revoked sessions get 401 with "Session revoked".
 
-## Backup & restore
+## 💾 Backup & restore
 
 - **Panel**: Settings → Backup exports users/buckets/settings JSON and
   re-imports it (existing names are skipped, never overwritten). Object *data*
@@ -230,7 +241,7 @@ calls get 401; revoked sessions get 401 with "Session revoked".
   files). SQLite WAL mode is on, so copy it quiesced or also grab the
   `-wal`/`-shm` sidecars.
 
-## Troubleshooting
+## 🔧 Troubleshooting
 
 - **Login says "Invalid username or password" (403 with a message):** wrong
   credentials (or the admin was renamed in Settings → Admin account). After 6
@@ -250,7 +261,7 @@ calls get 401; revoked sessions get 401 with "Session revoked".
   serve or deny the real app paths before the S3 router runs (full list in
   notes).
 
-## Notes and limitations
+## 📝 Notes and limitations
 
 - Signature V4 (header auth **and** presigned URLs for GET, HEAD, PUT,
   DELETE); no versioning; no bucket policies or object tagging (those
@@ -276,7 +287,7 @@ calls get 401; revoked sessions get 401 with "Session revoked".
   creating a file over an existing name is rejected (409). Bulk copy/move
   without "overwrite" reports conflicts (409 + list) instead of partial writes.
 
-## Security checklist
+## 🔒 Security checklist
 
 - HTTPS everywhere — SigV4 sends keys with every request.
 - Delete `install.php` after installation.
@@ -284,14 +295,17 @@ calls get 401; revoked sessions get 401 with "Session revoked".
 - Strong admin password (bcrypt-hashed); use **Sessions → Revoke others**
   after any incident, and regenerate leaked user keys (or **Disable** the user
   to block keys instantly while keeping data).
-- Keep presigned-link expiries short; share only over trusted channels.
+- Keep share-link expiries short (or revoke token links you no longer need);
+  share only over trusted channels.
 - Confirm `data/` is not web-readable after upload (bundled rules cover
   Apache + the nginx sample).
 
-## Releases
+## 🔖 Releases
 
 Every commit is released on GitHub with a version bump: the commit sets
 the version in the `VERSION` file (shown in the Settings footer; the legacy
 `APP_VERSION` in `config.php` is preserved untouched by updates) and is tagged
-`vX.Y.Z`, then pushed with the tag. Each Release ships the full source
-(`data/` is gitignored, so live objects and the database never ship).
+`vX.Y.Z`, then pushed with the tag. Each Release ships clean deploy archives
+(`minis3-vX.Y.Z.zip` + `.sha256`, runtime files only — no CI workflows, tests
+or local data) plus the full source (`data/` is gitignored, so live objects
+and the database never ship).
