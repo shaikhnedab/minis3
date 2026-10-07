@@ -749,6 +749,10 @@ tr.slow td:last-child{color:var(--warn);font-weight:700}
 .userlink{cursor:pointer}
 .userlink:hover{color:var(--primary);text-decoration:underline}
 .notes-block{background:var(--surface-2);border:1px solid var(--outline-var);border-radius:8px;padding:10px 12px;font-size:13px;line-height:1.55}
+.filelist{max-height:220px;overflow-y:auto;background:var(--surface-2);border:1px solid var(--outline-var);border-radius:8px;padding:8px 12px;font-size:12px;line-height:1.7;overscroll-behavior:contain}
+.filelist .mono{font-family:'IBM Plex Mono',ui-monospace,Menlo,Consolas,monospace;overflow-wrap:anywhere}
+.fl-rep{color:var(--warn);font-weight:700;margin-right:8px}
+.fl-add{color:var(--ok);font-weight:700;margin-right:8px}
 /* drag & drop move between folders */
 tr[data-key][draggable="true"],.gcard[data-key]{cursor:grab}
 .drover{outline:2px dashed var(--primary) !important;outline-offset:-2px;border-radius:8px}
@@ -2221,9 +2225,16 @@ $('#updateNowBtn').addEventListener('click', () => {
             await api('updater', { json: { op: 'cleanup' } });
             $('#updateProgress').innerHTML = '';
             await refreshUpdateSummary();
+            const frep = (ap.files && (ap.files.replaced.length || ap.files.added.length))
+                ? '<p class="muted" style="margin:12px 0 6px">Changed files</p><div class="filelist">' +
+                  ap.files.replaced.map(f => '<div><span class="fl-rep">~</span><span class="mono">' + esc(f) + '</span></div>').join('') +
+                  ap.files.added.map(f => '<div><span class="fl-add">+</span><span class="mono">' + esc(f) + '</span></div>').join('') +
+                  '</div>'
+                : '';
             openModal(
                 '<h3>Updated to ' + esc(mg.version) + '</h3>' +
                 '<p class="muted">Installed ' + Number((ap.counts && ap.counts.replaced) || 0) + ' replaced and ' + Number((ap.counts && ap.counts.added) || 0) + ' new files. Reload the panel to run the new version.</p>' +
+                frep +
                 '<div class="modal-actions"><button class="btn btn-filled" onclick="location.reload()">Reload panel</button></div>');
         } catch (e) {
             $('#updateProgress').innerHTML = '';

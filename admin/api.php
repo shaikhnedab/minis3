@@ -2035,7 +2035,7 @@ function admin_updater(string $method): void
             $st['error'] = null;
             updater_state_save($st);
             updater_lock_release();
-            admin_ok(['counts' => $counts, 'skipped' => ['protected' => $plan['skipped_protected'], 'deleted' => $plan['skipped_deleted']], 'warnings' => $plan['warnings']]);
+            admin_ok(['counts' => $counts, 'files' => ['replaced' => array_values($plan['replace']), 'added' => array_values($plan['add'])], 'skipped' => ['protected' => $plan['skipped_protected'], 'deleted' => $plan['skipped_deleted']], 'warnings' => $plan['warnings']]);
         } catch (Throwable $e) {
             updater_lock_release();
             // A backup made before the failure stays registered so the
@@ -2085,6 +2085,12 @@ function admin_updater(string $method): void
             }
             $st = updater_state_load();
             $st['migrated'] = ['at' => gmdate('Y-m-d H:i:s'), 'version' => $live];
+            // Refresh the cached release info so the panel stops offering the
+            // version that was just installed (best effort - a failed refresh
+            // simply clears the stale offer).
+            $fresh = updater_check(app_version());
+            $st['release'] = (!empty($fresh['ok'])) ? $fresh : null;
+            $st['checked_at'] = gmdate('Y-m-d H:i:s');
             $st['error'] = null;
             updater_state_save($st);
             updater_lock_release();
