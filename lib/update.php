@@ -848,6 +848,31 @@ function updater_extractor_note(): string
     return 'none';
 }
 
+// Every install target must be writable BEFORE backup starts, so a
+// read-only file aborts with a fixable message instead of a half-applied
+// update. Returns the list of blocked relative paths.
+function updater_check_writable(string $appRoot, array $plan): array
+{
+    $bad = [];
+    foreach ((array)($plan['replace'] ?? []) as $rel) {
+        $live = rtrim($appRoot, '/') . '/' . $rel;
+        if (!is_file($live) || !is_writable($live)) {
+            $bad[] = $rel;
+        }
+    }
+    foreach ((array)($plan['add'] ?? []) as $rel) {
+        $dir = dirname(rtrim($appRoot, '/') . '/' . $rel);
+        $probe = $dir;
+        while (!is_dir($probe) && dirname($probe) !== $probe) {
+            $probe = dirname($probe);
+        }
+        if (!is_dir($probe) || !is_writable($probe)) {
+            $bad[] = $rel;
+        }
+    }
+    return array_values(array_unique($bad));
+}
+
 // ---- backup / apply / rollback ----
 
 function updater_backup_root(?string $dataDir = null): string
@@ -924,20 +949,20 @@ function updater_do_apply(string $appRoot, string $pkgRoot, array $journal, stri
         $src = rtrim($pkgRoot, '/') . '/' . $rel;
         $live = rtrim($appRoot, '/') . '/' . $rel;
         if (!is_file($src)) {
-            return 'Package file missing: ' . $rel;
+            return 'Package file missing: "' . $rel . '"';
         }
         if (!updater_mkdir(dirname($live))) {
-            return 'Cannot create directory for: ' . $rel;
+            return 'Cannot create directory for: "' . $rel . '"';
         }
         if (is_file($live) && !$wasPlanned) {
             $bdst = rtrim($backupDir, '/') . '/files/' . $rel;
             if (!updater_mkdir(dirname($bdst)) || !@copy($live, $bdst)) {
-                return 'Cannot back up: ' . $rel;
+                return 'Cannot back up: "' . $rel . '"';
             }
         }
         $mode = is_file($live) ? fileperms($live) : false;
         if (!@copy($src, $live)) {
-            return 'Cannot write: ' . $rel;
+            return 'Cannot write: "' . $rel . '"';
         }
         if ($mode !== false) {
             @chmod($live, $mode & 0777);

@@ -1,11 +1,17 @@
-# MiniS3 on DirectAdmin - installation guide
+# 🖥️ MiniS3 on DirectAdmin — installation guide
 
-This guide walks through deploying MiniS3 on a typical DirectAdmin host
-(Apache 2.4 + PHP, shared hosting style). It should take about 10 minutes.
+Deploy MiniS3 on a typical DirectAdmin host (Apache 2.4 + PHP, shared hosting
+style) in about 10 minutes.
+
+Contents: [🌐 Domain](#-1-create-the-subdomain-or-domain) ·
+[📤 Upload](#-2-upload-the-files) · [🐘 PHP](#-3-php-version-and-extensions) ·
+[⚙️ Install](#-4-install) · [✅ First test](#-5-first-login-and-test) ·
+[🔧 Settings](#-6-directadmin-specific-settings) · [💾 Backups](#-7-backups) ·
+[🔧 Troubleshooting](#-8-troubleshooting) · [🔒 Security](#-9-security-checklist)
 
 ---
 
-## 1. Create the subdomain (or domain)
+## 🌐 1. Create the subdomain (or domain)
 
 1. Log in to DirectAdmin.
 2. **Domain Setup** -> add a subdomain, e.g. `s3.yourdomain.com`
@@ -31,14 +37,16 @@ The web root will be something like:
 /home/USERNAME/domains/s3.yourdomain.com/public_html
 ```
 
-## 2. Upload the files
+## 📤 2. Upload the files
 
 Upload the **contents of the `minis3/` folder** into that `public_html/`
 (not a sub-folder):
 
-- `index.php`, `install.php`, `reset.php`, `config.php`, `.htaccess`, `router.php`
+- `index.php`, `install.php`, `reset.php`, `config.php`, `VERSION`,
+  `.htaccess`, `router.php`
 - `admin/` (index.php, api.php)
-- `lib/` (util.php, db.php, log.php, auth.php, s3.php, webauthn.php)
+- `lib/` (util.php, db.php, log.php, auth.php, s3.php, webauthn.php,
+  version.php, update.php)
 - `data/` (can be empty)
 - `tools/` (optional - contains `reset-admin.php`, the CLI password reset
   tool; it is web-denied by `.htaccess` and refuses to run from a browser)
@@ -55,6 +63,7 @@ public_html/
 |-- index.php
 |-- install.php
 |-- config.php
+|-- VERSION
 |-- admin/
 |   |-- index.php
 |   `-- api.php
@@ -62,24 +71,27 @@ public_html/
 |-- data/
 ```
 
-## 3. PHP version and extensions
+## 🐘 3. PHP version and extensions
 
 1. **Domain Setup** -> select the domain -> **Select PHP Version**
    (or the CloudLinux PHP Selector / custombuild PHP version).
 2. Choose **PHP 8.2 or newer**.
-3. Required extensions: `pdo_sqlite`, `sqlite3` - these are bundled in every
-   DirectAdmin PHP build and are enabled by default. You can verify by opening
-   `https://s3.yourdomain.com/admin/index.php` and, if it fails, checking with
-   a temp `phpinfo()` file.
+3. Required extensions: `pdo_sqlite`, `simplexml`, `openssl`, `mbstring`,
+   `fileinfo`, `json` - these are bundled in every DirectAdmin PHP build and
+   are enabled by default. The installer's **server preflight** verifies all
+   of them live and tells you exactly where to enable anything missing.
 
-## 4. Install
+## ⚙️ 4. Install
 
 1. Open `https://s3.yourdomain.com/install.php` in a browser.
-2. Set the admin username and password (at least 8 chars), submit.
+2. Check the **Server preflight** card (green = good; any red row explains
+   itself with a DirectAdmin fix path), then set the admin username and
+   password (strength meter included) and submit. A **Re-check** button
+   re-runs the checks without losing the form.
 3. **Delete `install.php` from the server** (critical - while it exists,
    anyone who finds it can reach the installer page).
 
-## 5. First login and test
+## ✅ 5. First login and test
 
 1. Open `https://s3.yourdomain.com/admin/` and sign in.
 2. **Users** tab -> **+ Add user** -> note the access key and secret key
@@ -115,7 +127,11 @@ public_html/
    port 443, **Encryption: TLS/SSL** (or "No encryption" if you skip HTTPS),
    access key / secret key as username / password. Region: us-east-1.
 
-## 6. DirectAdmin-specific settings
+Tip: **Settings → Connect** prints ready-to-paste `aws` / `rclone` configs
+per user, and **Settings → Software update** installs new releases in place
+(no re-upload needed).
+
+## 🔧 6. DirectAdmin-specific settings
 
 ### Upload size limits
 
@@ -144,6 +160,11 @@ automatically writable - no chmod needed. If your host uses `mod_php`
 chown -R apache:apache /home/USERNAME/domains/s3.yourdomain.com/public_html/data
 ```
 
+The in-panel updater needs the same: if an update fails with
+`Cannot write: "..."`, the code files aren't writable by the PHP user - fix
+the ownership above (or File Manager permissions) and Apply again. Nothing
+is half-applied: the check runs before any backup is taken.
+
 ### .htaccess / mod_rewrite
 
 DirectAdmin enables `AllowOverride All` and `mod_rewrite` by default, so the
@@ -155,7 +176,7 @@ bundled `.htaccess` works as-is. It:
 - disables webserver output compression (mod_deflate / mod_brotli / mod_gzip)
   and PHP `zlib.output_compression` for the app
 
-### Output compression (important on shared hosting)
+### Output compression (important on shared hosting) 🗜️
 
 Many DirectAdmin hosts enable compression (`mod_deflate` and/or PHP's
 `zlib.output_compression`). That breaks streamed downloads: the `Content-Length`
@@ -184,7 +205,7 @@ download response must have a `Content-Length` header and **no**
 Note: folder **ZIP** downloads are streamed and intentionally have no
 `Content-Length` - that is expected on every host.
 
-### Verify data is not web-accessible
+### Verify data is not web-accessible 🔒
 
 Open these URLs in a browser (or curl) - all must return 403/404, never 200:
 
@@ -194,7 +215,7 @@ https://s3.yourdomain.com/lib/s3.php
 https://s3.yourdomain.com/config.php
 ```
 
-## 7. Backups
+## 💾 7. Backups
 
 - The whole `public_html/` (or at least `data/` + `lib/` + `admin/` + the
   root files) is your backup unit. DirectAdmin's **Scheduled Backups** already
@@ -209,13 +230,13 @@ https://s3.yourdomain.com/config.php
   panel's **Settings -> Backup** exports a JSON file that can be re-imported
   on another install.
 
-## 8. Troubleshooting
+## 🔧 8. Troubleshooting
 
 | Symptom | Fix |
 |---|---|
-| `install.php` shows an S3 XML `AccessDenied` error | The installer is being rewritten to `index.php` (S3 API) - the bundled `.htaccess` line `RewriteRule ^(index|install)\.php$ - [L]` is missing or overridden; re-upload the current `.htaccess` |
+| `install.php` shows an S3 XML `AccessDenied` error | The installer is being rewritten to `index.php` (S3 API) - the bundled `.htaccess` line `RewriteRule ^(index\|install)\.php$ - [L]` is missing or overridden; re-upload the current `.htaccess` |
 | `/admin/` returns 403 / doesn't render | `.htaccess` missing or `AllowOverride` off; re-upload the file, ask the host to enable `AllowOverride All` |
-| `install.php` -> 500 | PHP < 7.4 or `pdo_sqlite` missing; switch to PHP 8.2+ |
+| `install.php` -> 500 | PHP < 7.4 or `pdo_sqlite` missing; switch to PHP 8.2+ (the preflight card names the exact problem) |
 | `SignatureDoesNotMatch` in WinSCP/aws cli | Keys differ from what the server has - re-copy them from the admin panel (Users -> Keys, per-key copy buttons). Check server clock (skew limit is 15 min, `MAX_SKEW` in config.php) |
 | WinSCP: `SSL handshake failed` / certificate error | Server has no valid cert for the hostname. Issue Let's Encrypt in **SSL Certificates** (section 1) and connect to the exact hostname on the cert; or set WinSCP Encryption to "No encryption" (not recommended) |
 | WinSCP: `Connection reset` on TLS | Some hosts proxy TLS via an nginx/LiteSpeed layer with a stale cert - re-issue the cert for the domain, use port 443, and clear WinSCP's cached cert for the host |
@@ -228,8 +249,11 @@ https://s3.yourdomain.com/config.php
 | "Sign in with passkey" button missing | Passkeys need a secure context (HTTPS or localhost) and a modern browser - issue Let's Encrypt for the domain (section 1) and hard-refresh the page |
 | Passkey registration / sign-in fails with a 400 | The RP ID is the hostname you are visiting; if the site is reachable under several hostnames, always use the one from the certificate and log in to the exact hostname where the passkey was registered |
 | Downloads show no file size / video preview won't play | Webserver or PHP output compression is stripping `Content-Length` / corrupting streams - the bundled `.htaccess` disables it (section 6 "Output compression"); if a host rejects `php_value`, remove those blocks and set `zlib.output_compression = Off` in the domain's PHP settings |
+| Update check fails / times out | The server can't reach `api.github.com` (outbound HTTPS blocked by the host/proxy). Allow it or update by uploading the release zip manually |
+| Update Apply fails with `Cannot write: "…"` | Code files aren't writable by the PHP user - fix ownership (Permissions section above), Re-check, Apply again. Nothing is modified before this check passes |
+| Update interrupted halfway | Open Settings → Software update and use **Rollback** - the pre-update snapshot is kept automatically |
 
-## 9. Security checklist
+## 🔒 9. Security checklist
 
 - [ ] `install.php` deleted
 - [ ] HTTPS enabled (Let's Encrypt); SigV4 sends the secret-derived signature

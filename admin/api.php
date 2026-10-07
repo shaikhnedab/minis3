@@ -2012,14 +2012,22 @@ function admin_updater(string $method): void
             if (empty($plan['replace']) && empty($plan['add'])) {
                 throw new RuntimeException('Nothing to install.');
             }
+            $blocked = updater_check_writable(APP_ROOT, $plan);
+            if (!empty($blocked)) {
+                $shown = array_slice($blocked, 0, 5);
+                $more = count($blocked) > 5 ? ' (+' . (count($blocked) - 5) . ' more)' : '';
+                throw new RuntimeException('Cannot write: "' . implode('", "', $shown) . '"' . $more .
+                    '. Make the code files writable by the PHP user (DirectAdmin File Manager permissions, or chown/chmod over SSH), then Re-check and Apply again. Nothing was changed.');
+            }
             $installed = updater_installed_hashes($staged['root'], array_merge($plan['replace'], $plan['add']));
+            $backup = null;
             list($backup, $err) = updater_do_backup(APP_ROOT, $plan, app_version(), $installed);
             if ($err !== null) {
                 throw new RuntimeException($err);
             }
             list($counts, $err) = updater_do_apply(APP_ROOT, $staged['root'], $backup['journal'], $backup['dir']);
             if ($err !== null) {
-                throw new RuntimeException($err . ' (backup kept - use Rollback).');
+                throw new RuntimeException($err);
             }
             $st = updater_state_load();
             $st['backup'] = $backup;
@@ -2030,6 +2038,15 @@ function admin_updater(string $method): void
             admin_ok(['counts' => $counts, 'skipped' => ['protected' => $plan['skipped_protected'], 'deleted' => $plan['skipped_deleted']], 'warnings' => $plan['warnings']]);
         } catch (Throwable $e) {
             updater_lock_release();
+            // A backup made before the failure stays registered so the
+            // Rollback button remains available.
+            if (isset($backup) && is_array($backup) && !empty($backup['dir'])) {
+                $st = updater_state_load();
+                if (empty($st['backup'])) {
+                    $st['backup'] = $backup;
+                    updater_state_save($st);
+                }
+            }
             updater_fail($e->getMessage());
             admin_err($e->getMessage(), 500);
         }

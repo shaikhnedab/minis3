@@ -1,11 +1,18 @@
-# MiniS3 on nginx with PHP 8.5 - installation guide
+# 🖥️ MiniS3 on nginx with PHP 8.5 - installation guide
 
 Guide for a VPS / dedicated server running nginx + PHP 8.5 FPM (Debian,
 Ubuntu, AlmaLinux/Rocky and similar). Assumes root access. Takes ~15 minutes.
 
+Contents: [📦 Packages](#-1-install-nginx-and-php-85) ·
+[📤 Code](#-2-upload-the-code) · [🔧 nginx](#-3-configure-nginx) ·
+[🔑 Permissions](#-4-permissions) · [⚙️ Install](#-5-install) ·
+[🔒 TLS](#-6-tls-recommended) · [✅ Test](#-7-test-with-an-s3-client) ·
+[📏 Sizing](#-8-sizing-for-large-uploads) · [💾 Backups](#-9-backups) ·
+[🔧 Troubleshooting](#-10-troubleshooting) · [🔒 Security](#-11-security-checklist)
+
 ---
 
-## 1. Install nginx and PHP 8.5
+## 📦 1. Install nginx and PHP 8.5
 
 **Debian / Ubuntu** - PHP 8.5 comes from the Sury PPA (Ubuntu) or Debian
 unstable/sid packages (Debian 13 "trixie" ships 8.4 - add Sury for 8.5):
@@ -34,6 +41,10 @@ dnf install -y nginx php-fpm php-cli php-pdo_sqlite php-sqlite3
 php -v           # verify 8.5.x
 ```
 
+(`openssl`, `mbstring`, `fileinfo`, `json` and `simplexml` ship with these
+PHP builds; the installer's **server preflight** verifies every requirement
+live.)
+
 Check the FPM socket exists (the socket path depends on the distro/PHP
 build - this guide uses `/run/php/php8.5-fpm.sock`):
 
@@ -41,7 +52,7 @@ build - this guide uses `/run/php/php8.5-fpm.sock`):
 ls /run/php/php8.5-fpm.sock
 ```
 
-## 2. Upload the code
+## 📤 2. Upload the code
 
 ```bash
 mkdir -p /var/www/minis3
@@ -58,6 +69,7 @@ Result:
 |-- install.php
 |-- reset.php       (web admin password reset; active only with a data/reset.enabled marker)
 |-- config.php
+|-- VERSION
 |-- router.php
 |-- admin/
 |-- lib/
@@ -66,7 +78,7 @@ Result:
 |                    web access is denied by the bundled nginx.conf)
 ```
 
-## 3. Configure nginx
+## 🔧 3. Configure nginx
 
 The bundled `nginx.conf` ships with a full TLS setup: a port-80 server that
 redirects to HTTPS and a port-443 server with certificate placeholders and
@@ -103,7 +115,7 @@ nginx -t && systemctl reload nginx
 If you use a full `server_name` like `s3.example.com`, point a DNS A record
 at the server first, or nginx will refuse to serve requests for it.
 
-## 4. Permissions
+## 🔑 4. Permissions
 
 PHP-FPM runs as `www-data` (Debian/Ubuntu) or `apache` (AlmaLinux). Make the
 app root readable and `data/` writable by that user:
@@ -117,19 +129,27 @@ chmod 770 /var/www/minis3/data               # objects + SQLite DB are written h
 (If the default pool uses another user - `grep -r '^user' /etc/php/*/fpm/pool.d/`
 - use that instead.)
 
-## 5. Install
+The in-panel updater needs the same: code files must be writable by the FPM
+user or Apply aborts up front with the exact paths (nothing half-applied).
+
+## ⚙️ 5. Install
 
 1. `systemctl start nginx php8.5-fpm` (if not already running) and
    `systemctl enable nginx php8.5-fpm`.
-2. Open `http://YOUR-IP-OR-DOMAIN/install.php` (or the https URL from step 6),
-   set the admin username and password. The sample nginx config has a `location = /install.php`
-   block that runs the installer; once you delete the file it returns 404.
+2. Open `http://YOUR-IP-OR-DOMAIN/install.php` (or the https URL from step 6).
+   Check the **Server preflight** card first (green = good), then set the
+   admin username and password (strength meter included). The sample nginx
+   config has a `location = /install.php` block that runs the installer;
+   once you delete the file it returns 404.
 3. **Delete `install.php` from the server.**
 4. Open `/admin/`, sign in, **Users** -> **+ Add user**, note the keys
    (per-key copy buttons; **Settings -> Connect** prints ready-to-paste
    `rclone` / `aws cli` configs per user).
 
-## 6. TLS (recommended)
+Later updates happen in place via **Settings → Software update** - no
+re-upload needed.
+
+## 🔒 6. TLS (recommended)
 
 ```bash
 apt install -y certbot python3-certbot-nginx   # or: dnf install certbot python3-certbot-nginx
@@ -154,7 +174,7 @@ systemd timer (`systemctl list-timers | grep certbot`).
 Note: the sample enables HTTP/2 (`http2 on;`, nginx >= 1.25.1). On older
 nginx builds use `listen 443 ssl http2;` instead.
 
-## 7. Test with an S3 client
+## ✅ 7. Test with an S3 client
 
 ```
 # rclone
@@ -169,7 +189,7 @@ aws --endpoint-url https://s3.example.com s3 ls
 aws --endpoint-url https://s3.example.com s3 cp file.txt s3://my-bucket/
 ```
 
-## 8. Sizing for large uploads
+## 📏 8. Sizing for large uploads
 
 - `client_max_body_size 10G` in `s3.conf` - raise if you store larger objects.
 - PHP-FPM has no body-size limit (the S3 API streams `php://input`), but
@@ -187,7 +207,7 @@ disables it at runtime). Compression strips `Content-Length` from streamed
 downloads and corrupts video/audio previews - the same symptoms as on Apache
 hosts where mod_deflate is enabled.
 
-## 9. Backups
+## 💾 9. Backups
 
 ```bash
 # full backup of app + database (stop writes for a consistent snapshot):
@@ -206,7 +226,7 @@ For users/buckets/settings metadata only (no object data), the admin
 panel's **Settings -> Backup** exports a JSON file that can be re-imported
 on another install.
 
-## 10. Troubleshooting
+## 🔧 10. Troubleshooting
 
 | Symptom | Fix |
 |---|---|
@@ -225,8 +245,11 @@ on another install.
 | Forgot the admin username / password | With shell access: `php tools/reset-admin.php` from the app root (clears two-factor authentication too). Without shell access: create an empty file `data/reset.enabled` (FTP / File Manager), open `/reset.php`, set a new username/password - the marker auto-deletes on success |
 | "Sign in with passkey" button missing | Passkeys need a secure context (HTTPS or localhost) and a modern browser - issue a certbot certificate (section 6) and hard-refresh |
 | Passkey registration / sign-in fails with a 400 | The RP ID is the hostname you are visiting; always use the exact hostname from the certificate (and the one where the passkey was registered) |
+| Update check fails / times out | The server can't reach `api.github.com` (outbound HTTPS blocked?) - allow it, or update by uploading the release zip manually |
+| Update Apply fails with `Cannot write: "…"` | Code files aren't writable by the FPM user - fix ownership (section 4), Re-check, Apply again. Nothing is modified before this check passes |
+| Update interrupted halfway | Open Settings → Software update and use **Rollback** - the pre-update snapshot is kept automatically |
 
-## 11. Security checklist
+## 🔒 11. Security checklist
 
 - [ ] `install.php` deleted
 - [ ] HTTPS enabled with certbot; SigV4 signs every request, so plain HTTP

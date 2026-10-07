@@ -201,6 +201,19 @@ t_check($err3c === null && !file_exists(APP_ROOT . '/lib/new.php') && $out3['rem
 t_check(updater_requirements(['min_php' => '7.4.0', 'required_extensions' => ['json']], APP_ROOT, 1024) === [], 'requirements pass');
 $issues = updater_requirements(['min_php' => '99.0', 'required_extensions' => ['nope_ext_xyz']], APP_ROOT, 1024);
 t_check(count($issues) === 2, 'requirements fail loudly', implode('; ', $issues));
+// Writability gate: read-only target is reported before anything is touched.
+@mkdir($tmp . '/wapp', 0775, true);
+file_put_contents($tmp . '/wapp/ok.php', 'x');
+file_put_contents($tmp . '/wapp/locked.php', 'x');
+chmod($tmp . '/wapp/locked.php', 0444);
+$wplan = ['replace' => ['ok.php', 'locked.php'], 'add' => ['newdir/n.php'], 'skipped_protected' => [], 'skipped_deleted' => [], 'warnings' => []];
+$blocked = updater_check_writable($tmp . '/wapp', $wplan);
+if (posix_geteuid() === 0) {
+    echo "  skip writability gate (running as root)\n";
+} else {
+    t_check($blocked === ['locked.php'], 'writability gate lists read-only file', json_encode($blocked));
+}
+chmod($tmp . '/wapp/locked.php', 0644);
 t_check(in_array(updater_extractor_note(), ['zip', 'fallback', 'none'], true), 'extractor note');
 t_check(updater_human_bytes(1536) === '1.5 KB', 'human bytes');
 

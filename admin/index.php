@@ -2227,8 +2227,9 @@ $('#updateNowBtn').addEventListener('click', () => {
                 '<div class="modal-actions"><button class="btn btn-filled" onclick="location.reload()">Reload panel</button></div>');
         } catch (e) {
             $('#updateProgress').innerHTML = '';
-            err.textContent = e.message + ' Your install was not modified' + (/backup kept|Rollback/i.test(e.message) ? ' (a backup was kept - use Rollback).' : '.');
+            err.textContent = e.message + (/Nothing was changed\.$/.test(e.message) ? '' : ' Some files may already have been replaced - use Rollback to restore the backup.');
             err.classList.remove('hidden');
+            await refreshUpdateSummary();
         }
     };
 });
