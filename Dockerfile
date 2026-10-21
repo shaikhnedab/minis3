@@ -1,6 +1,10 @@
 # MiniS3 on Alpine: nginx + PHP-FPM in one small image.
 # Single container (supervisor runs both processes), plain HTTP on :80 -
 # terminate TLS in front (reverse proxy / load balancer) if you need it.
+# NOTE: the php:8.3-fpm-alpine float MUST resolve to a build carrying the
+# php2shell fixes (PHP >= 8.3.36, security release 2026-10-21 - see README).
+# Verify inside the container: php -v must be >= 8.3.36. Once Docker Library
+# publishes the versioned tag, pin it (php:8.3.36-fpm-alpine) in your build.
 FROM php:8.3-fpm-alpine
 
 RUN apk add --no-cache nginx supervisor sqlite-libs \

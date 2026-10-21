@@ -414,6 +414,12 @@ input[type="checkbox"].rowcheck{width:18px;height:18px;cursor:pointer;accent-col
     display:flex;gap:10px;align-items:flex-start;background:var(--warn-container);color:var(--on-warn-container);
     border-radius:12px;padding:12px 14px;font-size:13px;
 }
+.secwarn{
+    display:flex;gap:10px;align-items:flex-start;background:var(--warn-container);color:var(--on-warn-container);
+    border-radius:12px;padding:12px 14px;font-size:13px;line-height:1.55;margin:0 0 12px;
+}
+.secwarn .bi{flex:none;margin-top:1px}
+.secwarn code{color:inherit;opacity:.85}
 .upload-progress{display:flex;align-items:center;gap:12px;margin-top:12px}
 .progress{flex:1;height:5px;background:var(--surface-2);border-radius:999px;overflow:hidden}
 .progress div{height:100%;width:0;background:var(--primary);border-radius:999px;transition:width .2s var(--ease-standard)}
@@ -2015,6 +2021,7 @@ async function loadServerInfo() {
     const diskPct = d.disk_total > 0 ? Math.min(100, Math.round((d.disk_total - d.disk_free) / d.disk_total * 100)) : 0;
     const row = (k, v) => '<div class="tu-row"><span>' + k + '</span><span style="flex:1">' + v + '</span></div>';
     box.innerHTML =
+        phpSecBanner(d.php_sec, d.php_version).replace('margin:0 0 12px', 'margin:0 0 10px') +
         row('PHP', '<code>' + esc(d.php_version) + '</code> <span class="muted">' + esc(d.sapi) + '</span>') +
         row('SQLite', '<code>' + esc(d.sqlite_version) + '</code>') +
         row('Disk free', '<code>' + esc(fmtBytes(d.disk_free)) + '</code> of <code>' + esc(fmtBytes(d.disk_total)) + '</code>' +
@@ -2144,6 +2151,17 @@ function updateChangelogHtml(body) {
     return esc(body || 'No changelog provided.').replace(/\n/g, '<br>');
 }
 
+// php2shell warning banner (shown when the running PHP build predates the
+// 2026-10-21 security fixes; sec = {vulnerable, fixed, cves, note}).
+function phpSecBanner(sec, phpVersion) {
+    if (!sec || !sec.vulnerable) return '';
+    const v = phpVersion ? ' <code>' + esc(phpVersion) + '</code>' : '';
+    return '<div class="secwarn"><span class="bi" data-icon="alert"></span><div>' +
+        '<strong>PHP security (php2shell)</strong>' + v + ' &mdash; this PHP build is affected by ' +
+        esc(sec.cves) + ' (critical unauthenticated RCE in the PHP runtime itself, disclosed 2026-10-21). ' +
+        esc(sec.note) + ' MiniS3 code cannot fix this &mdash; only a PHP update can. Until then, keep a WAF (e.g. Cloudflare managed rules) in front.</div></div>';
+}
+
 async function refreshUpdateSummary() {
     const box = $('#updateSummary');
     if (!box) return;
@@ -2170,6 +2188,12 @@ async function refreshUpdateSummary() {
         html += '<p class="error" style="margin:6px 0 0">' + esc(st.error) + '</p>';
     }
     box.innerHTML = html;
+    const card = box.closest('.card');
+    if (card) {
+        const old = card.querySelector('.secwarn');
+        if (old) old.remove();
+        card.insertAdjacentHTML('afterbegin', phpSecBanner(st.php_sec, st.php_version));
+    }
     $('#updateNowBtn').classList.toggle('hidden', !updateRelease);
     const hasBackup = !!(st.backup && st.backup.dir);
     $('#updateRollbackBtn').classList.toggle('hidden', !hasBackup);

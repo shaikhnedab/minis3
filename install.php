@@ -6,6 +6,7 @@ declare(strict_types=1);
 require __DIR__ . '/config.php';
 require APP_ROOT . '/lib/util.php';
 require APP_ROOT . '/lib/db.php';
+require APP_ROOT . '/lib/version.php';
 
 db_init();
 
@@ -39,6 +40,16 @@ function install_checks(): array
         'detail' => version_compare(PHP_VERSION, '7.4.0', '>=') ? 'Meets the 7.4+ requirement.' : 'MiniS3 needs PHP 7.4 or newer.',
         'fix_da' => 'Domain Setup -> select the domain -> Select PHP Version -> pick 8.2 or newer.',
         'fix_ssh' => 'Install a newer PHP (e.g. apt install php8.3-fpm / dnf module enable php:remi-8.3) and point the web server at it.',
+    ];
+    $sec = php_sec_php2shell();
+    $checks[] = [
+        'id' => 'php-sec', 'label' => 'PHP security (php2shell)', 'value' => $sec['vulnerable'] ? 'affected' : 'patched',
+        'status' => $sec['vulnerable'] ? 'warn' : 'ok',
+        'detail' => $sec['vulnerable']
+            ? 'This PHP build is affected by ' . $sec['cves'] . ' (critical unauthenticated RCE in the PHP runtime, disclosed 2026-10-21). ' . $sec['note'] . ' MiniS3 code cannot fix this - only a PHP update can.'
+            : $sec['note'],
+        'fix_da' => 'Ask the host to update PHP (fixed in 8.2.35 / 8.3.36 / 8.4.27 / 8.5.12), then re-check.',
+        'fix_ssh' => 'apt / dnf update php* to the patched release and restart PHP-FPM (every worker).',
     ];
     $exts = [
         'pdo_sqlite' => ['Required: database driver. Without it nothing works.', true],

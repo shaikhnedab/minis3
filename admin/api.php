@@ -1854,6 +1854,8 @@ function admin_updater(string $method): void
         }
         $st = updater_state_load();
         $st['current'] = app_version();
+        $st['php_version'] = PHP_VERSION;
+        $st['php_sec'] = php_sec_php2shell();
         $st['extractor'] = updater_extractor_note();
         $st['zip_available'] = class_exists('ZipArchive');
         admin_ok($st);
@@ -2233,6 +2235,7 @@ function admin_server_info(): void
     admin_ok([
         'php_version' => PHP_VERSION,
         'sapi' => php_sapi_name(),
+        'php_sec' => php_sec_php2shell(),
         'sqlite_version' => (string)db()->query('SELECT sqlite_version()')->fetchColumn(),
         'disk_free' => (int)@disk_free_space(DATA_DIR),
         'disk_total' => (int)@disk_total_space(DATA_DIR),

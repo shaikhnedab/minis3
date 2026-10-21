@@ -299,6 +299,46 @@ calls get 401; revoked sessions get 401 with "Session revoked".
   share only over trusted channels.
 - Confirm `data/` is not web-readable after upload (bundled rules cover
   Apache + the nginx sample).
+- Keep PHP itself patched — see **php2shell** below.
+
+### 🩹 php2shell — PHP runtime RCE (October 2026) ⚠️
+
+Two critical unauthenticated remote code execution vulnerabilities in the **PHP
+runtime itself** (not application code) were disclosed on 2026-10-21:
+[CVE-2026-109618](https://github.com/php/php-src/security/advisories/GHSA-w8hw-w9fx-j79w)
+and [CVE-2026-109619](https://github.com/php/php-src/security/advisories/GHSA-6wmf-4rv5-p3rp),
+known as **php2shell**. No PHP web server is safe until updated, including
+PHP-FPM, mod_php, php-cgi, FrankenPHP and LiteSpeed.
+
+**The only complete fix is updating PHP:** ≥ 8.2.35 / 8.3.36 / 8.4.27 /
+8.5.12 (PHP ≤ 8.1 is EOL — vendor or source backports only). Update and
+**restart every PHP worker**. The admin panel shows an amber **PHP security
+(php2shell)** banner on Settings → Software update when the running build is
+affected, `/health` reports `"php_vulnerable": true`, and the installer
+preflight has a matching row.
+
+While you update (mitigations, not fixes — from the
+[PHP advisory](https://www.php.net/archive/2026.php#2026-10-21-5)):
+
+- `session.upload_progress.enabled = 0` (ini/FPM pool, then **restart every
+  worker**) — blocks CVE-2026-109619's confirmed session path. Do not rely on
+  `ini_set()` or `.user.ini`.
+- On PHP 8.5: `fatal_error_backtraces = 0` (blocks the confirmed backtrace path).
+- For CVE-2026-109618: prefer `memory_limit = -1` applied so apps can't
+  override it (`php_admin_value` in the FPM pool), with a container/cgroup
+  memory limit as the availability boundary. The bundled Docker image already
+  ships this (`deploy/docker/php-minis3.ini`); run it with `docker run -m 1g ...`.
+- Cap request shape at the proxy: header count/size (`large_client_header_buffers`
+  in the bundled nginx configs), `post_max_size`, `max_input_vars`,
+  `max_input_nesting_level`, `max_file_uploads` (all set in the Docker ini).
+- Keep a WAF in front, e.g. Cloudflare's managed rules
+  ("Generic Rules - Anomalous Execution" +
+  [full transaction detection](https://blog.cloudflare.com/php-vulnerabilities-waf-protection/)),
+  which block known php2shell payloads on all plans as defense-in-depth.
+
+The Docker image's floating `php:8.3-fpm-alpine` tag picks up patched builds
+automatically — verify `php -v` inside the container is ≥ 8.3.36, then pin the
+versioned tag in your own build.
 
 ## 🔖 Releases
 

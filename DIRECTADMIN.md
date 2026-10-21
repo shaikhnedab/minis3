@@ -250,11 +250,22 @@ https://s3.yourdomain.com/config.php
 | Passkey registration / sign-in fails with a 400 | The RP ID is the hostname you are visiting; if the site is reachable under several hostnames, always use the one from the certificate and log in to the exact hostname where the passkey was registered |
 | Downloads show no file size / video preview won't play | Webserver or PHP output compression is stripping `Content-Length` / corrupting streams - the bundled `.htaccess` disables it (section 6 "Output compression"); if a host rejects `php_value`, remove those blocks and set `zlib.output_compression = Off` in the domain's PHP settings |
 | Update check fails / times out | The server can't reach `api.github.com` (outbound HTTPS blocked by the host/proxy). Allow it or update by uploading the release zip manually |
+| Amber "PHP security (php2shell)" banner on Settings | Your PHP build predates the 2026-10-21 fixes (CVE-2026-109618/109619, unauthenticated RCE in PHP itself) - ask the host to update PHP to >= 8.3.36 (8.4.27 / 8.5.12 for those branches); see section 9 |
 | Update Apply fails with `Cannot write: "…"` | Code files aren't writable by the PHP user - fix ownership (Permissions section above), Re-check, Apply again. Nothing is modified before this check passes |
 | Update interrupted halfway | Open Settings → Software update and use **Rollback** - the pre-update snapshot is kept automatically |
 
 ## 🔒 9. Security checklist
 
+- [ ] PHP is patched against **php2shell** (CVE-2026-109618 / CVE-2026-109619,
+      disclosed 2026-10-21 - critical unauthenticated RCE in the PHP runtime
+      itself, not in MiniS3 code). The panel's **PHP version** shows the build;
+      you need **>= 8.5.12 / 8.4.27 / 8.3.36 / 8.2.35** depending on branch
+      (PHP <= 8.1 needs a vendor or source backport). On shared hosting this is
+      the host's job - ask them to update, then re-check the preflight/panel
+      banner. Interim mitigations (not fixes): `session.upload_progress.enabled
+      = 0` and `fatal_error_backtraces = 0` (PHP 8.5+) in the domain's PHP
+      settings, plus a Cloudflare WAF in front if available. Full details:
+      README.md "php2shell".
 - [ ] `install.php` deleted
 - [ ] HTTPS enabled (Let's Encrypt); SigV4 sends the secret-derived signature
       in every request - plain HTTP lets anyone capture and replay it

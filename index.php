@@ -89,6 +89,7 @@ if ($path === '/health' && ($method === 'GET' || $method === 'HEAD')) {
         'time' => gmdate('Y-m-d H:i:s'),
         'disk_free_bytes' => (int)@disk_free_space(DATA_DIR),
         'db' => $dbOk ? 'ok' : 'error',
+        'php_vulnerable' => php_sec_php2shell()['vulnerable'],
     ]);
     http_response_code($dbOk ? 200 : 503);
     header('Content-Type: application/json');

@@ -246,11 +246,24 @@ on another install.
 | "Sign in with passkey" button missing | Passkeys need a secure context (HTTPS or localhost) and a modern browser - issue a certbot certificate (section 6) and hard-refresh |
 | Passkey registration / sign-in fails with a 400 | The RP ID is the hostname you are visiting; always use the exact hostname from the certificate (and the one where the passkey was registered) |
 | Update check fails / times out | The server can't reach `api.github.com` (outbound HTTPS blocked?) - allow it, or update by uploading the release zip manually |
+| Amber "PHP security (php2shell)" banner on Settings | Your PHP build predates the 2026-10-21 fixes (CVE-2026-109618/109619, unauthenticated RCE in PHP itself) - update PHP to >= 8.3.36 (8.4.27 / 8.5.12 for those branches) and restart PHP-FPM; see section 11 |
 | Update Apply fails with `Cannot write: "…"` | Code files aren't writable by the FPM user - fix ownership (section 4), Re-check, Apply again. Nothing is modified before this check passes |
 | Update interrupted halfway | Open Settings → Software update and use **Rollback** - the pre-update snapshot is kept automatically |
 
 ## 🔒 11. Security checklist
 
+- [ ] PHP is patched against **php2shell** (CVE-2026-109618 / CVE-2026-109619,
+      disclosed 2026-10-21 - critical unauthenticated RCE in the PHP runtime
+      itself, not in MiniS3 code). Run `php -v`: you need **>= 8.5.12 / 8.4.27
+      / 8.3.36 / 8.2.35** depending on your branch (PHP <= 8.1 needs a vendor
+      or source backport), then **restart PHP-FPM so every worker picks it up**.
+      The admin panel shows an amber **PHP security (php2shell)** banner and
+      `/health` reports `"php_vulnerable": true` until you do. Interim
+      mitigations (not fixes): `session.upload_progress.enabled = 0`,
+      `fatal_error_backtraces = 0` (PHP 8.5+), `php_admin_value memory_limit -1`
+      in the FPM pool plus a systemd/cgroup memory cap, and keep nginx's
+      `large_client_header_buffers` cap (bundled in the sample config). Full
+      details: README.md "php2shell".
 - [ ] `install.php` deleted
 - [ ] HTTPS enabled with certbot; SigV4 signs every request, so plain HTTP
       lets anyone capture and replay requests

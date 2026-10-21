@@ -27,17 +27,30 @@ mod_gzip_on No
 # output compression at runtime, this covers cases where that is ineffective.
 # If your host rejects php_value in .htaccess (500 on every page), remove the
 # matching <IfModule> block below - the rules above are the important part.
+# php2shell exposure reduction lives in the same blocks: session.upload_progress
+# is parsed before app code runs under mod_php (the demonstrated CVE-2026-109619
+# attack path applies before any application code), so it must be disabled
+# per-directory, not with ini_set(). fatal_error_backtraces exists on PHP 8.5+
+# and is ignored by older branches. These are mitigations - updating PHP to
+# 8.2.35 / 8.3.36 / 8.4.27 / 8.5.12+ remains the only complete fix (see README).
 <IfModule mod_php.c>
 php_value zlib.output_compression Off
+php_value session.upload_progress.enabled 0
+php_value fatal_error_backtraces 0
 </IfModule>
 <IfModule mod_php7.c>
 php_value zlib.output_compression Off
+php_value session.upload_progress.enabled 0
 </IfModule>
 <IfModule mod_php8.c>
 php_value zlib.output_compression Off
+php_value session.upload_progress.enabled 0
+php_value fatal_error_backtraces 0
 </IfModule>
 <IfModule mod_lsapi.c>
 php_value zlib.output_compression Off
+php_value session.upload_progress.enabled 0
+php_value fatal_error_backtraces 0
 </IfModule>
 
 <IfModule mod_rewrite.c>

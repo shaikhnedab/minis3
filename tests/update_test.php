@@ -63,6 +63,22 @@ t_check(app_version_normalize('v1.2.3') === '1.2.3', 'normalize v-tag');
 t_check(app_version_normalize('1.0.10') === '1.0.10', 'normalize plain');
 t_check(app_version_normalize('main') === '', 'normalize garbage rejected');
 t_check(app_version_normalize('../x') === '', 'normalize traversal rejected');
+
+// php2shell (CVE-2026-109618 / CVE-2026-109619) version classification.
+$secCases = [
+    ['8.5.11', true], ['8.5.12', false], ['8.5.13', false],
+    ['8.4.26', true], ['8.4.27', false],
+    ['8.3.35', true], ['8.3.36', false],
+    ['8.2.34', true], ['8.2.35', false],
+    ['8.1.33', true], ['7.4.33', true],
+    ['8.6.0RC3', true], ['8.6.0', true],
+    ['garbage!!', true],
+];
+foreach ($secCases as [$secVer, $secVuln]) {
+    $s = php_sec_php2shell($secVer);
+    t_check(($s['vulnerable'] === $secVuln) && $s['fixed'] !== '' && strpos((string)$s['cves'], 'CVE-2026-109618') !== false,
+        'php2shell classifies ' . $secVer, json_encode($s));
+}
 t_check(version_compare('1.0.11', '1.0.10', '>'), 'newer detected');
 t_check(!version_compare('1.0.10', '1.0.10', '>'), 'same is not newer');
 t_check(!version_compare('1.0.9', '1.0.10', '>'), 'older blocked (no downgrade)');
